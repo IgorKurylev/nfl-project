@@ -1,0 +1,80 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, echo=FALSE}
+# if (!require('RPostgreSQL'))
+# {
+#   install.packages('RPostgreSQL', dependencies = TRUE)
+#   library('RPostgreSQL')
+# }
+
+if (!require('plotly'))
+{
+  install.packages('plotly', dependencies = TRUE)
+  library('plotly')
+}
+if (!require('ggplot2'))
+{
+  install.packages('ggplot2', dependencies = TRUE)
+  library('ggplot2')
+}
+```
+
+```{r}
+# pg = dbDriver("PostgreSQL")
+# con = dbConnect(pg, user="postgres", password="fred",
+#                  host="localhost", port=5432, dbname="datascience")
+```
+
+
+```{r}
+df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+head(df)
+```
+
+```{r}
+# dbdf <- dbGetQuery(con, "select * from week1", as.is(TRUE))
+# ```
+
+# ```{r}
+# # dbdf$time <- as.POSIXlt(dbdf$time, tz="UTC")
+# head(dbdf)
+```
+
+```{r}
+df$time <- as.POSIXlt(df$time, tz="UTC")
+```
+
+
+```{r}
+slice_df <- df[as.Date(df$time,format='%Y-%M-%D') == "2018-09-07",]
+# slice_df <- slice_df[slice_df$position == 'FS',]
+# slice_df <- slice_df[slice_df$frameId == 1,]
+slice_df <- slice_df[slice_df$playId == 168,]
+```
+
+
+```{r}
+plt <- ggplot(slice_df, aes(frame = frameId)) + 
+  annotate("rect", xmin = 10, xmax = 20, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+  annotate("rect", xmin = 100, xmax = 110, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+  annotate("rect", xmin = 20, xmax = 100, ymin = 0, ymax = 53,fill='green', alpha=.2) + 
+ 
+  
+  # scale_colour_discrete(drop=TRUE, limits = levels(factor(slice_df$team))) + 
+  xlim(0, 120) + ylim(-10, 60) + 
+  geom_vline(xintercept = seq(10, 110, 10)) + 
+  geom_hline(yintercept = seq(0, 53, 53)) + 
+  geom_point(slice_df, mapping=aes(x, y,colour=team), size=3 ) + 
+  geom_text(slice_df, mapping=aes(x, y, label = position)) #+
+  # geom_vline(xintercept = 100-35, colour='red') 
+
+ggplotly(plt)
+
+# plot(x=slice_df$x, y=slice_df$y, label=slice_df$position)
+```
+
