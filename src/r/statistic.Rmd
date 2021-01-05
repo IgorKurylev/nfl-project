@@ -1,0 +1,104 @@
+---
+title: "Statistic"
+output: html_document
+---
+
+```{r , include=FALSE}
+library(plyr)
+library(dplyr)
+```
+
+```{r load data}
+stat <- read.csv('plays_split.csv', header = TRUE, sep=',')
+```
+
+Remove empty values
+```{r clear}
+stat <- subset(stat, !is.na(defendersInTheBox))
+stat <- subset(stat, !is.na(numberOfPassRushers))
+stat <- subset(stat, offenseFormation != '')
+stat <- subset(stat, typeDropback != '')
+```
+
+Add additional columns for statistic:
+-counts'  for counting;
+-success'  factor of success attack, if 'playResult' > 10 then success;
+```{r}
+stat$counts <- 1
+stat$success <- 0
+stat$success[stat$playResult >= 10] <- 1
+```
+
+Grouping values to find all possible interceptions
+```{r group}
+groupColumns = c("offenseFormation","typeDropback", "defendersInTheBox", "numberOfPassRushers", "success")
+dataCol = c("counts")
+#res <- ddply(week_time_qb, groupColumns, function(x) colMeans(x[dataColumns]) )
+res <- ddply(stat, groupColumns, function(x) colSums(x[dataCol]))
+res <- subset(res, counts > 30)
+
+
+single_grp_form <- aggregate(res$counts, by=list(offenseFormation=res$offenseFormation), FUN=sum)
+single_grp_type <- aggregate(res$counts, by=list(typeDropback=res$typeDropback), FUN=sum)
+single_grp_box <- aggregate(res$counts, by=list(defendersInTheBox=res$defendersInTheBox), FUN=sum)
+single_grp_rush <- aggregate(res$counts, by=list(numberOfPassRushers=res$numberOfPassRushers), FUN=sum)
+
+grouped_pos <- aggregate(res$counts, by=list(offenseFormation=res$offenseFormation, typeDropback=res$typeDropback), FUN=sum)
+grouped_def <- aggregate(res$counts, by=list(defendersInTheBox=res$defendersInTheBox, numberOfPassRushers=res$numberOfPassRushers), FUN=sum)
+
+all_grp <- aggregate(res$counts, by=list(offenseFormation=res$offenseFormation, 
+                                         typeDropback=res$typeDropback, 
+                                         defendersInTheBox=res$defendersInTheBox, 
+                                         numberOfPassRushers=res$numberOfPassRushers), 
+                     FUN=sum)
+```
+
+
+All interceptions:
+-'countsOfFormation' - number of 'offenseFormation' type;
+-'countOfDropback' - number of 'typeDropback' type;
+-'countOfDefInBox' - number of 'defendersInTheBox' type;
+-'countOfRushers' - number of 'numberOfPassRushers' type;
+-'countOfposition' - number of 'offenseFormation + typeDropback' type;
+-'countsOfDef' - number of 'defendersInTheBox + numberOfPassRushers' type;
+-'totalAll' - number of success (=1) and not success (=0) attacks;
+
+```{r interceptions}
+res <- res %>% rowwise %>% do({
+  result = as_data_frame(.)
+  result$countsOfFormation = single_grp_form[single_grp_form$offenseFormation == result$offenseFormation, 2]
+  result$countOfDropback = single_grp_type[single_grp_type$typeDropback == result$typeDropback, 2]
+  result$countOfDefInBox = single_grp_box[single_grp_box$defendersInTheBox == result$defendersInTheBox,2]
+  result$countOfRushers = single_grp_rush[single_grp_rush$numberOfPassRushers == result$numberOfPassRushers,2]
+  
+  result$countOfposition = grouped_pos[grouped_pos$offenseFormation == result$offenseFormation & 
+                                             grouped_pos$typeDropback == result$typeDropback, 3]
+  
+  result$countsOfDef = grouped_def[grouped_def$defendersInTheBox == result$defendersInTheBox & 
+                                             grouped_def$numberOfPassRushers == result$numberOfPassRushers, 3]
+  
+  result$totalAll = all_grp[all_grp$offenseFormation == result$offenseFormation & 
+                              all_grp$typeDropback == result$typeDropback &
+                              all_grp$defendersInTheBox == result$defendersInTheBox & 
+                              all_grp$numberOfPassRushers == result$numberOfPassRushers, 5]
+  
+  result
+})
+```
+
+Percent - number success or not success attacks of 'totalAll'
+```{r}
+res <- res %>%
+  rowwise %>%
+  do({
+    result = as_data_frame(.)
+    result$Percentage = round ( (result$counts/(result$totalAll))*100 , 2)
+    result
+  })
+```
+
+# Result
+
+```{r result}
+res
+```
