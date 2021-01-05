@@ -3,11 +3,12 @@ title: "filtered_heatmapping"
 author: "yurkovkirill"
 date: "05 01 2021"
 output:
+  #html_document
   rmarkdown::github_document: default
-  #pdf_document: default
+  pdf_document: default
 ---
 
-```{r all, include=FALSE}
+```{r all, include=TRUE}
 
 # setup
 
@@ -44,7 +45,7 @@ dbListTables(con)
 testTeam <- dbGetQuery(con, "SELECT DISTINCT w1.nflId, w1.team FROM plays as p JOIN week1 as w1 ON p.gameId = w1.gameId
                                       AND p.playId = w1.playId WHERE w1.gameId = 2018090600
                                       ORDER BY w1.nflId")#w1.event = 'ball_snap'")
-head(testTeam,60)
+head(testTeam, 12)
 # этот запрос дал нам понять, что команда у игрока во время игры не меняется, но мы знаем что меняется сторона
 # поэтому сделаем для всех игроков относительно мяча и playDirection, и получим в одном случае защиту справа
 # а в другом защиту слева. Потом отобрать по o = orientation? Больше никак вроде #Pending
