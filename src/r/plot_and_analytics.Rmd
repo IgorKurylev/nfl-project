@@ -5,15 +5,14 @@ output:
     df_print: paged
 ---
 
-Загружаем пакеты: `RPostgres`, `plotly`, `ggplot2`
+Загружаем пакеты: `RPostgres` - не используется, `plotly`, `ggplot2`
 
 ```{r, echo=FALSE}
-if (!require('RPostgres'))
-{
-  install.packages('RPostgres', dependencies = TRUE)
-  library('RPostgres')
-}
-
+# if (!require('RPostgres'))
+# {
+#   install.packages('RPostgres', dependencies = TRUE)
+#   library('RPostgres')
+# }
 if (!require('plotly'))
 {
   install.packages('plotly', dependencies = TRUE)
@@ -29,43 +28,49 @@ if (!require('ggplot2'))
 Подключение к Postgres
 
 ```{r}
-library(DBI)
-con <- dbConnect(RPostgres::Postgres(),
-                 dbname = 'datascience',
-                 host = 'localhost',
-                 port = 5432,
-                 user = 'postgres',
-                 password = 'fred')
+# library(DBI)
+# con <- dbConnect(RPostgres::Postgres(),
+#                  dbname = 'datascience',
+#                  host = 'localhost',
+#                  port = 5432,
+#                  user = 'postgres',
+#                  password = 'fred')
 ```
 
 
 Неиспользуется - данные об игровых моментах
 
 ```{r}
-# plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
 # plays_sql <- dbSendQuery(con, 'select * from plays')
 # plays_df <- dbFetch(plays_sql)
-# head(plays_df)
+plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
+head(plays_df)
 ```
 
 Запрашиваем данные из бд (соединяем week1 и plays для получения данных об игровом моменте)
 
 ```{r}
-week_plays <- dbSendQuery(con, 'select * from week1 join plays p on week1."gameId" = p."gameId" and week1."playId" = p."playId"')
-df_week <- dbFetch(week_plays)
+# week_plays <- dbSendQuery(con, 'select * from week1 join plays p on week1."gameId" = p."gameId" and week1."playId" = p."playId"')
+# df_week <- dbFetch(week_plays)
+df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+head(df)
 ```
 
 Преобразуем дату в POSIX формат
 
 ```{r}
-df_week$time <- as.POSIXlt(df_week$time, tz="UTC")
+# df_week$time <- as.POSIXlt(df_week$time, tz="UTC")
+df$time <- as.POSIXlt(df$time, tz="UTC")
 ```
 
 Делаем выборку по определенной дате и игровому моменту
 
 ```{r}
-slice_df <- df_week[as.Date(df_week$time,format='%Y-%M-%D') == "2018-09-07",]
+slice_df <- df[df$gameId==2018090600,]
 slice_df <- slice_df[slice_df$playId == 2474,]
+play_moment <- plays_df[plays_df$gameId==2018090600 & plays_df$playId == 2474,]
+# slice_df <- df_week[as.Date(df_week$time,format='%Y-%M-%D') == "2018-09-07",]
+# slice_df <- slice_df[slice_df$playId == 2474,]
 # slice_df <- slice_df[slice_df$position == 'WR' | slice_df$position == 'CB' |  slice_df$team == 'football',]
 # slice_df <- slice_df[slice_df$frameId == 1,]
 # slice_df <- df[df$playId == 3906,]
@@ -80,7 +85,7 @@ plt <- ggplot(slice_df, aes(frame = frameId)) +
   annotate("rect", xmin = 10, xmax = 110, ymin = 0, ymax = 53,fill='green', alpha=.2) + 
   xlim(0, 120) + ylim(-10, 60) + 
   geom_vline(xintercept = seq(0, 120, 10)) + 
-  geom_vline(xintercept = 10 + slice_df$yardlineNumber, colour='red') +
+  geom_vline(xintercept = 10 + play_moment$yardlineNumber, colour='red') +
   geom_hline(yintercept = seq(0, 53, 53)) + 
   geom_point(slice_df, mapping=aes(x, y,colour=team), size=3 ) + 
   geom_text(slice_df, mapping=aes(x, y, label = jerseyNumber))
@@ -91,9 +96,9 @@ ggplotly(plt)
 Делаем запрос к бд в данные про игроков
 
 ```{r}
-# players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
-players_sql <- dbSendQuery(con, 'select * from players')
-players_df <- dbFetch(players_sql)
+players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
+# players_sql <- dbSendQuery(con, 'select * from players')
+# players_df <- dbFetch(players_sql)
 players_df$birthDate <- as.Date(players_df$birthDate)
 players_df[players_df$position == 'WR',]
 ```
