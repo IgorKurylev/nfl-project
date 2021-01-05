@@ -1,16 +1,18 @@
 ---
-title: "R Notebook"
+title: "NFL Big Data Bowl 2021"
 output:
   html_document:
     df_print: paged
 ---
 
+Загружаем пакеты: `RPostgres`, `plotly`, `ggplot2`
+
 ```{r, echo=FALSE}
-# if (!require('RPostgreSQL'))
-# {
-#   install.packages('RPostgreSQL', dependencies = TRUE)
-#   library('RPostgreSQL')
-# }
+if (!require('RPostgres'))
+{
+  install.packages('RPostgres', dependencies = TRUE)
+  library('RPostgres')
+}
 
 if (!require('plotly'))
 {
@@ -24,57 +26,149 @@ if (!require('ggplot2'))
 }
 ```
 
+Подключение к Postgres
+
 ```{r}
-# pg = dbDriver("PostgreSQL")
-# con = dbConnect(pg, user="postgres", password="fred",
-#                  host="localhost", port=5432, dbname="datascience")
+library(DBI)
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = 'datascience',
+                 host = 'localhost',
+                 port = 5432,
+                 user = 'postgres',
+                 password = 'fred')
 ```
 
 
+Неиспользуется - данные об игровых моментах
+
 ```{r}
-df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
-head(df)
+# plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
+# plays_sql <- dbSendQuery(con, 'select * from plays')
+# plays_df <- dbFetch(plays_sql)
+# head(plays_df)
 ```
 
-```{r}
-# dbdf <- dbGetQuery(con, "select * from week1", as.is(TRUE))
-# ```
+Запрашиваем данные из бд (соединяем week1 и plays для получения данных об игровом моменте)
 
-# ```{r}
-# # dbdf$time <- as.POSIXlt(dbdf$time, tz="UTC")
-# head(dbdf)
+```{r}
+week_plays <- dbSendQuery(con, 'select * from week1 join plays p on week1."gameId" = p."gameId" and week1."playId" = p."playId"')
+df_week <- dbFetch(week_plays)
 ```
 
+Преобразуем дату в POSIX формат
+
 ```{r}
-df$time <- as.POSIXlt(df$time, tz="UTC")
+df_week$time <- as.POSIXlt(df_week$time, tz="UTC")
 ```
 
+Делаем выборку по определенной дате и игровому моменту
 
 ```{r}
-slice_df <- df[as.Date(df$time,format='%Y-%M-%D') == "2018-09-07",]
-# slice_df <- slice_df[slice_df$position == 'FS',]
+slice_df <- df_week[as.Date(df_week$time,format='%Y-%M-%D') == "2018-09-07",]
+slice_df <- slice_df[slice_df$playId == 2474,]
+# slice_df <- slice_df[slice_df$position == 'WR' | slice_df$position == 'CB' |  slice_df$team == 'football',]
 # slice_df <- slice_df[slice_df$frameId == 1,]
-slice_df <- slice_df[slice_df$playId == 168,]
+# slice_df <- df[df$playId == 3906,]
 ```
 
+Строим положение игроков на поле
 
 ```{r}
 plt <- ggplot(slice_df, aes(frame = frameId)) + 
-  annotate("rect", xmin = 10, xmax = 20, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
-  annotate("rect", xmin = 100, xmax = 110, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
-  annotate("rect", xmin = 20, xmax = 100, ymin = 0, ymax = 53,fill='green', alpha=.2) + 
- 
-  
-  # scale_colour_discrete(drop=TRUE, limits = levels(factor(slice_df$team))) + 
+  annotate("rect", xmin = 0, xmax = 10, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+  annotate("rect", xmin = 110, xmax = 120, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+  annotate("rect", xmin = 10, xmax = 110, ymin = 0, ymax = 53,fill='green', alpha=.2) + 
   xlim(0, 120) + ylim(-10, 60) + 
-  geom_vline(xintercept = seq(10, 110, 10)) + 
+  geom_vline(xintercept = seq(0, 120, 10)) + 
+  geom_vline(xintercept = 10 + slice_df$yardlineNumber, colour='red') +
   geom_hline(yintercept = seq(0, 53, 53)) + 
   geom_point(slice_df, mapping=aes(x, y,colour=team), size=3 ) + 
-  geom_text(slice_df, mapping=aes(x, y, label = position)) #+
-  # geom_vline(xintercept = 100-35, colour='red') 
+  geom_text(slice_df, mapping=aes(x, y, label = jerseyNumber))
 
 ggplotly(plt)
-
-# plot(x=slice_df$x, y=slice_df$y, label=slice_df$position)
 ```
+
+Делаем запрос к бд в данные про игроков
+
+```{r}
+# players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
+players_sql <- dbSendQuery(con, 'select * from players')
+players_df <- dbFetch(players_sql)
+players_df$birthDate <- as.Date(players_df$birthDate)
+players_df[players_df$position == 'WR',]
+```
+
+BMI Categories: 
+Underweight = <18.5
+Normal weight = 18.5–24.9 
+Overweight = 25–29.9 
+Obesity = BMI of 30 or greater
+
+Чтобы подсчитать индекс массы тела используем формулу для фунтов:
+$(weight / height^2) * 703$
+
+```{r}
+players_df$bmi <- (players_df$weight / (players_df$height)^2) * 703
+```
+
+Расшифровка игроков
+
+'CB', : CornerBack
+'SS', : Strong Safety
+'MLB', : Middle LineBacker
+'OLB', : Outer LineBacker
+'FS', : Free Safety
+'WR', : Wide Receiver
+'QB', : Quater Back
+'TE', : Tight End
+'RB', : Running Back
+'DE', : Defensive End
+'LB', : LineBacker
+'FB', : FullBack
+'ILB', : Inside LineBacker
+'DB', : Defensive Back
+'S', : Safety
+'HB', : HalfBack
+'NT', : Nose Tackle
+'P', : Punter
+'LS', : LongSnaper
+'K', : Kicker
+'DT' : Defense Tackle
+
+```{r}
+offence_df <- subset(players_df, (players_df$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
+special_team <- subset(players_df, (players_df$position %in% c('K', 'P', 'LS')))
+defence_df <- subset(players_df, !(players_df$position %in% c('K', 'P', 'LS', 'QB','WR','RB','FB', 'TE', 'NT', 'HB')))
+```
+
+# Defence team
+
+Underweight = <18.5
+Normal weight = 18.5–24.9 
+Overweight = 25–29.9 
+Obesity = BMI of 30 or greater
+
+```{r}
+plt <- ggplot(data=defence_df, aes(as.factor(position), bmi)) +
+  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
+  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) +
+  geom_hline(yintercept = seq(25,30,5), colour='red')
+plot(plt + labs(title = 'BMI by position (Defence)', x = 'Position', y = 'BMI', color = 'Position'))
+```
+
+# Offence team
+
+Underweight = <18.5
+Normal weight = 18.5–24.9 
+Overweight = 25–29.9 
+Obesity = BMI of 30 or greater
+
+```{r}
+plt2 <- ggplot(data=offence_df, aes(as.factor(position), bmi)) +
+  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
+  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
+  geom_hline(yintercept = seq(25,30,5), colour='red')
+plot(plt2 + labs(title = 'BMI by position (Offence)', x = 'Position', y = 'BMI', color = 'Position'))
+```
+
 
