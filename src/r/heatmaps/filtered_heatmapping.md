@@ -358,58 +358,41 @@ dbListFields(con, "football_inSnap1")
 ``` r
 #dbRemoveTable(con, "football_inSnap1")
 
-
+############################ PLOT FUNC DEF #####################
+relGraphs <- function(df, strBest, strWin, strBestWin){
+  summary(df)
+  dfBest <- df[df$epa < summary(df$epa)[[2]],]
+  dfWin <- df[df$success == 0,]
+  dfBestWin <- df[df$epa < summary(df$epa)[[2]] & df$success == 0,]
+  dfBestPlot <- dfBest %>% 
+    ggplot(aes(x = x_rel, y = y_rel)) +
+    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+    labs(title=strBest)
+  dfWinPlot <- dfWin %>% 
+    ggplot(aes(x = x_rel, y = y_rel)) +
+    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+    labs(title=strWin)
+  dfBestWin <- dfBestWin %>% 
+    ggplot(aes(x = x_rel, y = y_rel)) +
+    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+    labs(title=strBestWin)
+  return (list(dfBestPlot, dfWinPlot, dfBestWin))
+}
+# EXAMPLE: plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
+# plots
+# or plots[[1]]
 #### теперь пробуем соединить по команде (home / away) ####
 # Красота
 DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                       JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
                                       WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')")
-summary(DefPlayers_inSnap)
-```
 
-    ##       epa                x_rel            y_rel          displayName       
-    ##  Min.   :-11.93595   Min.   : 0.000   Min.   :-49.7900   Length:148274     
-    ##  1st Qu.: -0.76341   1st Qu.: 2.450   1st Qu.: -6.5000   Class :character  
-    ##  Median : -0.19567   Median : 4.870   Median :  0.0200   Mode  :character  
-    ##  Mean   :  0.01333   Mean   : 6.233   Mean   :  0.0305                     
-    ##  3rd Qu.:  0.97432   3rd Qu.: 8.140   3rd Qu.:  6.5300                     
-    ##  Max.   :  8.62932   Max.   :66.030   Max.   : 47.1200                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  50   Min.   :2.018e+09   Length:148274      Length:148274     
-    ##  1st Qu.:1133   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2176   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2184   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3213   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5661   Max.   :2.018e+09                                        
-    ##     success     
-    ##  Min.   :0.000  
-    ##  1st Qu.:0.000  
-    ##  Median :0.000  
-    ##  Mean   :0.338  
-    ##  3rd Qu.:1.000  
-    ##  Max.   :1.000
-
-``` r
-DefPlayers_inSnapBest <- DefPlayers_inSnap[DefPlayers_inSnap$epa < -0.76,]
-DefPlayers_inSnapWinScr <- DefPlayers_inSnap[DefPlayers_inSnap$success == 0,]
-#DefPlayers_inSnapWorst <- DefPlayers_inSnap[DefPlayers_inSnap$epa > 0.97,]
-DefPlayers_inSnapBest %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 15)) + #очистка
-  labs(title="DefPlayers_inSnapBest")
+plots <- relGraphs(DefPlayers_inSnap, "DefPlayers_inSnapBest", "DefPlayers_inSnapWinScr","DefPlayers_inSnapBestWin")
+plots[[3]]
 ```
 
 ![](filtered_heatmapping_files/figure-gfm/all-1.png)<!-- -->
-
-``` r
-DefPlayers_inSnapWinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 15)) + #очистка
-  labs(title="DefPlayers_inSnapWinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-2.png)<!-- -->
 
 ``` r
 ##### У нас получилось учесть всех защитников для обоих команд
@@ -417,19 +400,20 @@ DefPlayers_inSnapWinScr %>%
 
 ##### DIFFERENT TYPES OF OFFENSE #######################################################
 ### разные типы атак
-attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(playId) FROM plays GROUP BY offenseFormation")
+attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(DISTINCT(playId)) as popularity FROM plays
+                                GROUP BY offenseFormation ORDER BY popularity DESC")
 attackTypes
 ```
 
-    ##   offenseFormation COUNT(playId)
-    ## 1                            141
-    ## 2            EMPTY          2428
-    ## 3           I_FORM           915
-    ## 4            JUMBO            51
-    ## 5           PISTOL           251
-    ## 6          SHOTGUN         12627
-    ## 7       SINGLEBACK          2790
-    ## 8          WILDCAT            36
+    ##   offenseFormation popularity
+    ## 1          SHOTGUN       4320
+    ## 2       SINGLEBACK       1949
+    ## 3            EMPTY       1857
+    ## 4           I_FORM        802
+    ## 5           PISTOL        246
+    ## 6                         138
+    ## 7            JUMBO         51
+    ## 8          WILDCAT         36
 
 ``` r
 # I_FORM
@@ -437,52 +421,11 @@ def_ag_I_FORM <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y -
                                   w.gameId, w.team, w.playDirection, fS.success  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'I_FORM'")
-summary(def_ag_I_FORM)
+plots <- relGraphs(def_ag_I_FORM, "def_ag_I_FORM_Best", "def_ag_I_FORM_Win","def_ag_I_FORM_BestWin")
+plots[[3]]
 ```
 
-    ##       epa               x_rel            y_rel          displayName       
-    ##  Min.   :-6.15907   Min.   : 0.090   Min.   :-46.5400   Length:6662       
-    ##  1st Qu.:-0.51937   1st Qu.: 2.450   1st Qu.: -5.3275   Class :character  
-    ##  Median :-0.04667   Median : 4.430   Median :  0.0200   Mode  :character  
-    ##  Mean   : 0.25764   Mean   : 5.579   Mean   : -0.0232                     
-    ##  3rd Qu.: 1.13023   3rd Qu.: 6.800   3rd Qu.:  5.4100                     
-    ##  Max.   : 7.07367   Max.   :22.930   Max.   : 23.7900                     
-    ##      playId           gameId              team           playDirection     
-    ##  Min.   :  51.0   Min.   :2.018e+09   Length:6662        Length:6662       
-    ##  1st Qu.: 782.5   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :1680.0   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :1838.4   Mean   :2.018e+09                                        
-    ##  3rd Qu.:2819.0   3rd Qu.:2.018e+09                                        
-    ##  Max.   :4721.0   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3979  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_I_FORM_Best <- def_ag_I_FORM[def_ag_I_FORM$epa < -0.51,]
-def_ag_I_FORM_WinScr <- def_ag_I_FORM[def_ag_I_FORM$success == 0,]
-#def_ag_I_FORM_Worst <- def_ag_I_FORM[def_ag_I_FORM$epa > 1.13,]
-
-def_ag_I_FORM_Best %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_I_FORM_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-3.png)<!-- -->
-
-``` r
-def_ag_I_FORM_WinScr %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_I_FORM_BestWinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-4.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-2.png)<!-- -->
 
 ``` r
 # SINGLEBACK
@@ -490,52 +433,11 @@ def_ag_SINGLEBACK <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'SINGLEBACK'")
-summary(def_ag_SINGLEBACK)
+plots <- relGraphs(def_ag_SINGLEBACK, "def_ag_SINGLEBACK_Best", "def_ag_SINGLEBACK_Win","def_ag_SINGLEBACK_BestWin")
+plots[[3]]
 ```
 
-    ##       epa              x_rel            y_rel           displayName       
-    ##  Min.   :-8.5402   Min.   : 0.030   Min.   :-46.74000   Length:20855      
-    ##  1st Qu.:-0.5304   1st Qu.: 2.460   1st Qu.: -5.77000   Class :character  
-    ##  Median :-0.1113   Median : 4.400   Median : -0.15000   Mode  :character  
-    ##  Mean   : 0.2014   Mean   : 5.521   Mean   : -0.02823                     
-    ##  3rd Qu.: 1.1000   3rd Qu.: 6.880   3rd Qu.:  5.71000                     
-    ##  Max.   : 8.2073   Max.   :24.520   Max.   : 45.18000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  51   Min.   :2.018e+09   Length:20855       Length:20855      
-    ##  1st Qu.: 833   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :1646   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :1835   Mean   :2.018e+09                                        
-    ##  3rd Qu.:2793   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5385   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3906  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_SINGLEBACK_Best <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$epa < -0.53,]
-def_ag_SINGLEBACK_WinScr <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$success == 0,]
-#def_ag_SINGLEBACK_Worst <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$epa > 1.10,]
-
-def_ag_SINGLEBACK_Best %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_SINGLEBACK_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-5.png)<!-- -->
-
-``` r
-def_ag_SINGLEBACK_WinScr %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_SINGLEBACK_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-6.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-3.png)<!-- -->
 
 ``` r
 # SHOTGUN
@@ -543,51 +445,11 @@ def_ag_SHOTGUN <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y 
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'SHOTGUN'")
-summary(def_ag_SHOTGUN)
+plots <- relGraphs(def_ag_SHOTGUN, "def_ag_SHOTGUN_Best", "def_ag_SHOTGUN_Win","def_ag_SHOTGUN_BestWin")
+plots[[3]]
 ```
 
-    ##       epa                x_rel            y_rel           displayName       
-    ##  Min.   :-11.93595   Min.   : 0.000   Min.   :-48.56000   Length:98452      
-    ##  1st Qu.: -0.84981   1st Qu.: 2.400   1st Qu.: -6.61000   Class :character  
-    ##  Median : -0.21685   Median : 4.980   Median :  0.05000   Mode  :character  
-    ##  Mean   : -0.04194   Mean   : 6.377   Mean   :  0.02659                     
-    ##  3rd Qu.:  0.90331   3rd Qu.: 8.460   3rd Qu.:  6.62000                     
-    ##  Max.   :  8.62932   Max.   :66.030   Max.   : 47.12000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  50   Min.   :2.018e+09   Length:98452       Length:98452      
-    ##  1st Qu.:1286   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2280   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2303   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3365   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5602   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3249  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_SHOTGUN_Best <- def_ag_SHOTGUN[def_ag_SHOTGUN$epa < -0.84,]
-def_ag_SHOTGUN_WinScr <- def_ag_SHOTGUN[def_ag_SHOTGUN$success == 0,]
-#def_ag_SHOTGUN_Worst <- def_ag_SHOTGUN[def_ag_SHOTGUN$epa > 0.90,]
-def_ag_SHOTGUN_Best %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_SHOTGUN_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-7.png)<!-- -->
-
-``` r
-def_ag_SHOTGUN_WinScr %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_SHOTGUN_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-8.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-4.png)<!-- -->
 
 ``` r
 # PISTOL
@@ -595,51 +457,11 @@ def_ag_PISTOL <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y -
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'PISTOL'")
-summary(def_ag_PISTOL)
+plots <- relGraphs(def_ag_PISTOL, "def_ag_PISTOL_Best", "def_ag_PISTOL_Win","def_ag_PISTOL_BestWin")
+plots[[3]]
 ```
 
-    ##       epa              x_rel            y_rel        displayName       
-    ##  Min.   :-6.6393   Min.   : 0.120   Min.   :-21.78   Length:1865       
-    ##  1st Qu.:-0.5976   1st Qu.: 2.620   1st Qu.: -5.91   Class :character  
-    ##  Median :-0.1110   Median : 4.770   Median :  0.01   Mode  :character  
-    ##  Mean   : 0.1721   Mean   : 5.938   Mean   :  0.11                     
-    ##  3rd Qu.: 1.2633   3rd Qu.: 7.410   3rd Qu.:  6.23                     
-    ##  Max.   : 6.6493   Max.   :29.320   Max.   : 22.26                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  54   Min.   :2.018e+09   Length:1865        Length:1865       
-    ##  1st Qu.: 742   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :1982   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :1925   Mean   :2.018e+09                                        
-    ##  3rd Qu.:2982   3rd Qu.:2.018e+09                                        
-    ##  Max.   :4799   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3871  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_PISTOL_Best <- def_ag_PISTOL[def_ag_PISTOL$epa < -0.59,]
-def_ag_PISTOL_WinScr <- def_ag_PISTOL[def_ag_PISTOL$success == 0,]
-#def_ag_PISTOL_Worst <- def_ag_PISTOL[def_ag_PISTOL$epa > 1.26,]
-def_ag_PISTOL_Best %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.3, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_PISTOL_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-9.png)<!-- -->
-
-``` r
-def_ag_PISTOL_WinScr %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_PISTOL_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-10.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-5.png)<!-- -->
 
 ``` r
 # WILDCAT 
@@ -647,51 +469,11 @@ def_ag_WILDCAT <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y 
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'WILDCAT'")
-summary(def_ag_WILDCAT)
+plots <- relGraphs(def_ag_WILDCAT, "def_ag_WILDCAT_Best", "def_ag_WILDCAT_Win","def_ag_WILDCAT_BestWin")
+plots[[3]]
 ```
 
-    ##       epa              x_rel            y_rel           displayName       
-    ##  Min.   :-5.0202   Min.   : 0.500   Min.   :-22.85000   Length:263        
-    ##  1st Qu.:-0.8078   1st Qu.: 2.520   1st Qu.: -6.51500   Class :character  
-    ##  Median :-0.3447   Median : 4.600   Median :  0.12000   Mode  :character  
-    ##  Mean   :-0.2177   Mean   : 5.701   Mean   :  0.02255                     
-    ##  3rd Qu.: 0.5062   3rd Qu.: 7.690   3rd Qu.:  7.28500                     
-    ##  Max.   : 3.1279   Max.   :17.220   Max.   : 21.89000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   : 192   Min.   :2.018e+09   Length:263         Length:263        
-    ##  1st Qu.:1649   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2177   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2341   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3266   3rd Qu.:2.018e+09                                        
-    ##  Max.   :4228   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.2471  
-    ##  3rd Qu.:0.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_WILDCAT_Best <- def_ag_WILDCAT[def_ag_WILDCAT$epa < -0.80,]
-def_ag_WILDCAT_WinScr <- def_ag_WILDCAT[def_ag_WILDCAT$success == 0,]
-#def_ag_WILDCAT_Worst <- def_ag_WILDCAT[def_ag_WILDCAT$epa > 0.50,] 
-def_ag_WILDCAT_Best %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_WILDCAT")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-11.png)<!-- -->
-
-``` r
-def_ag_WILDCAT_WinScr %>%
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_WILDCAT_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-12.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-6.png)<!-- -->
 
 ``` r
 # JUMBO 
@@ -699,51 +481,11 @@ def_ag_JUMBO <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'JUMBO'")
-summary(def_ag_JUMBO)
+plots <- relGraphs(def_ag_JUMBO, "def_ag_JUMBO_Best", "def_ag_JUMBO_Win","def_ag_JUMBO_BestWin")
+plots[[3]]
 ```
 
-    ##       epa              x_rel            y_rel        displayName       
-    ##  Min.   :-4.4665   Min.   : 0.280   Min.   :-9.910   Length:297        
-    ##  1st Qu.:-0.3106   1st Qu.: 1.570   1st Qu.:-4.030   Class :character  
-    ##  Median :-0.1230   Median : 3.380   Median : 0.170   Mode  :character  
-    ##  Mean   : 0.4670   Mean   : 3.406   Mean   : 1.148                     
-    ##  3rd Qu.: 1.3858   3rd Qu.: 4.740   3rd Qu.: 4.930                     
-    ##  Max.   : 7.3358   Max.   :14.390   Max.   :37.740                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   : 187   Min.   :2.018e+09   Length:297         Length:297        
-    ##  1st Qu.: 889   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :1789   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :1902   Mean   :2.018e+09                                        
-    ##  3rd Qu.:2792   3rd Qu.:2.018e+09                                        
-    ##  Max.   :4590   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.4478  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_ag_JUMBO_Best <- def_ag_JUMBO[def_ag_JUMBO$epa < -0.31,]
-def_ag_JUMBO_WinScr <- def_ag_JUMBO[def_ag_JUMBO$success == 0,]
-#def_ag_JUMBO_Worst <- def_ag_JUMBO[def_ag_JUMBO$epa > 1.38,] 
-def_ag_JUMBO_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_JUMBO_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-13.png)<!-- -->
-
-``` r
-def_ag_JUMBO_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_JUMBO_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-14.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-7.png)<!-- -->
 
 ``` r
 # EMPTY
@@ -751,54 +493,15 @@ def_ag_EMPTY <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'EMPTY'")
-summary(def_ag_EMPTY)
+plots <- relGraphs(def_ag_EMPTY, "def_ag_EMPTY_Best", "def_ag_EMPTY_Win","def_ag_EMPTY_BestWin")
+plots[[3]]
 ```
 
-    ##       epa               x_rel            y_rel          displayName       
-    ##  Min.   :-9.59810   Min.   : 0.010   Min.   :-49.7900   Length:18767      
-    ##  1st Qu.:-0.85601   1st Qu.: 2.750   1st Qu.: -7.8400   Class :character  
-    ##  Median :-0.22596   Median : 5.420   Median :  0.0800   Mode  :character  
-    ##  Mean   :-0.02454   Mean   : 6.547   Mean   :  0.1021                     
-    ##  3rd Qu.: 1.04434   3rd Qu.: 8.400   3rd Qu.:  7.9900                     
-    ##  Max.   : 7.77519   Max.   :48.900   Max.   : 46.3500                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  51   Min.   :2.018e+09   Length:18767       Length:18767      
-    ##  1st Qu.: 978   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2028   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2068   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3110   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5637   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3335  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
+![](filtered_heatmapping_files/figure-gfm/all-8.png)<!-- -->
 
 ``` r
-def_ag_EMPTY_Best <- def_ag_EMPTY[def_ag_EMPTY$epa < -0.85,]
-def_ag_EMPTY_WinScr <- def_ag_EMPTY[def_ag_EMPTY$success == 0,]
-#def_ag_EMPTY_Worst <- def_ag_EMPTY[def_ag_EMPTY$epa > 1.04,]
-def_ag_EMPTY_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_EMPTY_Best")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-15.png)<!-- -->
-
-``` r
-def_ag_EMPTY_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_EMPTY_WinScr")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-16.png)<!-- -->
-
-``` r
-######################################################################################################################
+########################################################################################
+##### DIFFERENT TYPES OF YARDLINES #####################################################
 ### разные по ярдлиниям 
 # 0-10
 def_yl_0_10 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
@@ -807,51 +510,11 @@ def_yl_0_10 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 0 AND fS.yardlineNumber <= 10")
-summary(def_yl_0_10)
+plots <- relGraphs(def_yl_0_10, "def_yl_0_10_Best", "def_yl_0_10_Win","def_yl_0_10_BestWin")
+plots[[3]]
 ```
 
-    ##       epa               x_rel            y_rel           displayName       
-    ##  Min.   :-11.9360   Min.   : 0.000   Min.   :-25.32000   Length:12465      
-    ##  1st Qu.: -0.5562   1st Qu.: 2.300   1st Qu.: -6.35000   Class :character  
-    ##  Median : -0.1528   Median : 4.230   Median :  0.07000   Mode  :character  
-    ##  Mean   :  0.1582   Mean   : 5.008   Mean   :  0.06645                     
-    ##  3rd Qu.:  1.4571   3rd Qu.: 6.380   3rd Qu.:  6.39000                     
-    ##  Max.   :  8.2073   Max.   :36.060   Max.   : 46.24000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  69   Min.   :2.018e+09   Length:12465       Length:12465      
-    ##  1st Qu.:1258   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2256   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2273   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3330   3rd Qu.:2.018e+09                                        
-    ##  Max.   :4922   Max.   :2.018e+09                                        
-    ##     success     
-    ##  Min.   :0.000  
-    ##  1st Qu.:0.000  
-    ##  Median :0.000  
-    ##  Mean   :0.325  
-    ##  3rd Qu.:1.000  
-    ##  Max.   :1.000
-
-``` r
-def_yl_0_10_Best <- def_yl_0_10[def_yl_0_10$epa < -0.55,]
-def_yl_0_10_WinScr <- def_yl_0_10[def_yl_0_10$success == 0,]
-#def_yl_0_10_Worst <- def_yl_0_10[def_yl_0_10$epa > 1.45,]
-def_yl_0_10_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best def on yardline 0-10")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-17.png)<!-- -->
-
-``` r
-def_yl_0_10_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Win def on yardline 0-10")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-18.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-9.png)<!-- -->
 
 ``` r
 # 10-20
@@ -861,51 +524,11 @@ def_yl_10_20 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 10 AND fS.yardlineNumber <= 20")
-summary(def_yl_10_20)
+plots <- relGraphs(def_yl_10_20, "def_yl_10_20_Best", "def_yl_10_20_Best","def_yl_10_20_Best")
+plots[[3]]
 ```
 
-    ##       epa               x_rel            y_rel           displayName       
-    ##  Min.   :-7.46543   Min.   : 0.010   Min.   :-48.56000   Length:21732      
-    ##  1st Qu.:-0.72015   1st Qu.: 2.550   1st Qu.: -6.57000   Class :character  
-    ##  Median :-0.16828   Median : 4.990   Median : -0.05000   Mode  :character  
-    ##  Mean   : 0.09273   Mean   : 6.203   Mean   : -0.02888                     
-    ##  3rd Qu.: 0.99142   3rd Qu.: 8.240   3rd Qu.:  6.60000                     
-    ##  Max.   : 8.62932   Max.   :48.900   Max.   : 47.12000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  58   Min.   :2.018e+09   Length:21732       Length:21732      
-    ##  1st Qu.:1114   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2172   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2192   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3198   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5661   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3047  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_yl_10_20_Best <- def_yl_10_20[def_yl_10_20$epa < -0.72,]
-def_yl_10_20_WinScr <- def_yl_10_20[def_yl_10_20$success == 0,]
-#def_yl_10_20_Worst <- def_yl_10_20[def_yl_10_20$epa > 0.99,]
-def_yl_10_20_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best def on yardline 10-20")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-19.png)<!-- -->
-
-``` r
-def_yl_10_20_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Win def on yardline 10-20")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-20.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-10.png)<!-- -->
 
 ``` r
 # 20-35
@@ -915,51 +538,11 @@ def_yl_20_35 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 20 AND fS.yardlineNumber <= 35")
-summary(def_yl_20_35)
+plots <- relGraphs(def_yl_20_35, "def_yl_20_35_Best", "def_yl_20_35_Best","def_yl_20_35_Best")
+plots[[3]]
 ```
 
-    ##       epa                 x_rel            y_rel           displayName       
-    ##  Min.   :-10.951801   Min.   : 0.000   Min.   :-49.79000   Length:58442      
-    ##  1st Qu.: -0.776415   1st Qu.: 2.470   1st Qu.: -6.52750   Class :character  
-    ##  Median : -0.216429   Median : 4.920   Median : -0.03000   Mode  :character  
-    ##  Mean   : -0.000178   Mean   : 6.298   Mean   :  0.01265                     
-    ##  3rd Qu.:  0.943866   3rd Qu.: 8.280   3rd Qu.:  6.50000                     
-    ##  Max.   :  8.397043   Max.   :66.030   Max.   : 47.04000                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  50   Min.   :2.018e+09   Length:58442       Length:58442      
-    ##  1st Qu.:1107   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2156   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2154   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3174   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5577   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3499  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
-
-``` r
-def_yl_20_35_Best <- def_yl_20_35[def_yl_20_35$epa < -0.77,]
-def_yl_20_35_WinScr <- def_yl_20_35[def_yl_20_35$success == 0,]
-#def_yl_20_35_Worst <- def_yl_20_35[def_yl_20_35$epa > 0.94,]
-def_yl_20_35_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best def on yardline 20-35")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-21.png)<!-- -->
-
-``` r
-def_yl_20_35_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Win def on yardline 20-35")
-```
-
-![](filtered_heatmapping_files/figure-gfm/all-22.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-11.png)<!-- -->
 
 ``` r
 # 35-50
@@ -969,53 +552,85 @@ def_yl_35_50 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 35 AND fS.yardlineNumber <= 50")
-summary(def_yl_35_50)
+plots <- relGraphs(def_yl_35_50, "def_yl_35_50_Best", "def_yl_35_50_Best","def_yl_35_50_Best")
+plots[[3]]
 ```
 
-    ##       epa               x_rel            y_rel          displayName       
-    ##  Min.   :-9.48768   Min.   : 0.000   Min.   :-46.7400   Length:55635      
-    ##  1st Qu.:-0.79665   1st Qu.: 2.440   1st Qu.: -6.4600   Class :character  
-    ##  Median :-0.23533   Median : 4.940   Median :  0.0800   Mode  :character  
-    ##  Mean   :-0.03597   Mean   : 6.451   Mean   :  0.0644                     
-    ##  3rd Qu.: 0.94936   3rd Qu.: 8.430   3rd Qu.:  6.5700                     
-    ##  Max.   : 7.33575   Max.   :62.770   Max.   : 46.3500                     
-    ##      playId         gameId              team           playDirection     
-    ##  Min.   :  60   Min.   :2.018e+09   Length:55635       Length:55635      
-    ##  1st Qu.:1138   1st Qu.:2.018e+09   Class :character   Class :character  
-    ##  Median :2183   Median :2.018e+09   Mode  :character   Mode  :character  
-    ##  Mean   :2193   Mean   :2.018e+09                                        
-    ##  3rd Qu.:3236   3rd Qu.:2.018e+09                                        
-    ##  Max.   :5637   Max.   :2.018e+09                                        
-    ##     success      
-    ##  Min.   :0.0000  
-    ##  1st Qu.:0.0000  
-    ##  Median :0.0000  
-    ##  Mean   :0.3414  
-    ##  3rd Qu.:1.0000  
-    ##  Max.   :1.0000
+![](filtered_heatmapping_files/figure-gfm/all-12.png)<!-- -->
 
 ``` r
-def_yl_35_50_Best <- def_yl_35_50[def_yl_35_50$epa < -0.79,]
-def_yl_35_50_WinScr <- def_yl_35_50[def_yl_35_50$success == 0,]
-#def_yl_35_50_Worst <- def_yl_35_50[def_yl_35_50$epa > 0.94,]
-def_yl_35_50_Best %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best def on yardline 35-50")
+####################################################################################
+##### DIFFERENT TYPES OF ролям #####################################################
+### разные по ролям ####### UNIVERSAL
+roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(nflId)) as popularity FROM allWeeks
+                                GROUP BY position ORDER BY popularity DESC")
+roleTypes
 ```
 
-![](filtered_heatmapping_files/figure-gfm/all-23.png)<!-- -->
+    ##    position popularity
+    ## 1        WR        226
+    ## 2        CB        196
+    ## 3        RB        139
+    ## 4        TE        128
+    ## 5       OLB        102
+    ## 6        QB         71
+    ## 7        FS         63
+    ## 8       ILB         56
+    ## 9        SS         55
+    ## 10       LB         54
+    ## 11       DE         51
+    ## 12       DB         50
+    ## 13      MLB         29
+    ## 14       DT         27
+    ## 15       FB         16
+    ## 16        P         13
+    ## 17       LS         12
+    ## 18        S          8
+    ## 19       NT          6
+    ## 20       HB          6
+    ## 21        K          5
+    ## 22       DL          1
+    ## 23                   0
 
 ``` r
-def_yl_35_50_WinScr %>% 
-  ggplot(aes(x = x_rel, y = y_rel)) +
-  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Win def on yardline 35-50")
+######
+### WR
+WR_def_pos <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                      w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
+                                      JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                      WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
+                                      AND w.position = 'WR'")
+plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
+plots[[3]]
 ```
 
-![](filtered_heatmapping_files/figure-gfm/all-24.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/all-13.png)<!-- -->
 
 ``` r
+##### DETECT POP TACTICS
+attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(DISTINCT(playId)) as popularity FROM plays
+                                GROUP BY offenseFormation ORDER BY popularity DESC")
+attackTypes
+```
+
+    ##   offenseFormation popularity
+    ## 1          SHOTGUN       4320
+    ## 2       SINGLEBACK       1949
+    ## 3            EMPTY       1857
+    ## 4           I_FORM        802
+    ## 5           PISTOL        246
+    ## 6                         138
+    ## 7            JUMBO         51
+    ## 8          WILDCAT         36
+
+``` r
+### разные по ролям ####### AGAINST POPULAR TACTICS
+### SHOTGUN
+### SINGLEBACK
+
+
+###### Популярные тактики по ярдлиниям c учетом на чьей стороне поля!
+
 # сравнить Worst
 # сделать по play Result, сравнить #Done
 
