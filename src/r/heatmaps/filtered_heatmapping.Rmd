@@ -9,8 +9,6 @@ output:
 
 ```{r all, include=TRUE}
 
-
-
 # setup
 
 #install.packages("RSQLite")
@@ -30,7 +28,17 @@ options(max.print=10000)
 
 # init database
 dbWriteTable(con, "games", read.csv("data/games.csv"))
-dbWriteTable(con, "plays", read.csv("data/plays.csv"))
+
+
+####
+# Add additional column for statistic:
+# -success'
+plays <- read.csv("data/plays.csv")
+plays$success <- 0
+plays$success[plays$playResult >= plays$yardsToGo] <- 1
+dbWriteTable(con, "plays", plays)
+
+####
 dbWriteTable(con, "allWeeks", read.csv("data/week1.csv"))
 dbListFields(con, "allWeeks")
 dbAppendTable(con, "allWeeks", read.csv("data/week2.csv"))
@@ -65,14 +73,11 @@ dbListTables(con)
 
 # нужно отобрать всех игроков в моменте, посмотрим не пропадают ли
 
-testTeam <- dbGetQuery(con, "SELECT DISTINCT w.nflId, w.team FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
+testTeam <- head(dbGetQuery(con, "SELECT DISTINCT w.nflId, w.team FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
                                       AND p.playId = w.playId WHERE w.gameId = 2018090600
-                                      ORDER BY w.nflId")#w.event = 'ball_snap'")
-head(testTeam,12)
+                                      ORDER BY w.nflId"),12)#w.event = 'ball_snap'")
+testTeam
 # этот запрос дал нам понять, что команда у игрока во время игры не меняется, но мы знаем что меняется сторона
-# поэтому сделаем для всех игроков относительно мяча и playDirection, и получим в одном случае защиту справа
-# а в другом защиту слева. Потом отобрать по o = orientation? Больше никак вроде #Pending
-
 
 testFrames <- head(dbGetQuery(con, "SELECT w.frameId, w.playId, COUNT(w.nflId), COUNT(w.displayName) FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
                                       AND p.playId = w.playId WHERE w.gameId = 2018090600
@@ -83,6 +88,8 @@ testFrames
 # ball_snap кадр и мы получим данные о всех зафиксированных игроках в моменте
 
 ################################################################################################################
+# Обработка данных
+################################################################################################################
 # информация о защитниках с относительными координатами
 ##### Нормальный отбор по команде нападения BEGIN
 # QUERIES for teams ########################
@@ -90,21 +97,25 @@ dbExecute(con, "UPDATE plays as p SET possessionTeam = 'away'
                 WHERE possessionTeam != (SELECT homeTeamAbbr FROM games as g WHERE p.gameId = g.gameId)")
 dbExecute(con, "UPDATE plays as p SET possessionTeam = 'home'
                 WHERE possessionTeam = (SELECT homeTeamAbbr FROM games as g WHERE p.gameId = g.gameId)")
-testTeam1 <- dbGetQuery(con, "SELECT team, COUNT(DISTINCT(nflId)) FROM allWeeks as w GROUP BY team")
+testTeam1 <- dbGetQuery(con, "SELECT team, COUNT(DISTINCT(playId)) FROM allWeeks as w GROUP BY team")
 testTeam1
 
 # проверка
 testTeamPlay <- dbGetQuery(con, "SELECT possessionTeam, COUNT(DISTINCT(playId)) FROM plays GROUP BY possessionTeam")
 testTeamPlay
 
+
+#######################################################################################################################
 # берем информацию по мячу ## MAIN QUERY for init point (ball)
+#######################################################################################################################
+
 dbListFields(con, "plays")
 # football_inSnap1 <- dbGetQuery(con, "SELECT p.epa, w.x as x_b, w.y as y_b, w.displayName, w.event, w.playId,
 #                                       w.gameId, p.offenseFormation, p.possessionTeam, p.yardlineNumber
 #                                       FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
 #                                       AND p.playId = w.playId WHERE w.event = 'ball_snap' AND w.displayName = 'Football'")
 dbWriteTable(con, "football_inSnap1", dbGetQuery(con, "SELECT p.epa, w.x as x_b, w.y as y_b, w.displayName, w.event, w.playId,
-                                      w.gameId, p.offenseFormation, p.possessionTeam, p.yardlineNumber
+                                      w.gameId, p.offenseFormation, p.possessionTeam, p.yardlineNumber, p.success
                                       FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
                                       AND p.playId = w.playId WHERE w.event = 'ball_snap' AND w.displayName = 'Football'"))
 dbListFields(con, "football_inSnap1")
@@ -114,16 +125,21 @@ dbListFields(con, "football_inSnap1")
 #### теперь пробуем соединить по команде (home / away) ####
 # Красота
 DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                      w.gameId, w.team, w.playDirection FROM football_inSnap1 as fS
+                                      w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                       JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
                                       WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')")
 summary(DefPlayers_inSnap)
 DefPlayers_inSnapBest <- DefPlayers_inSnap[DefPlayers_inSnap$epa < -0.76,]
+DefPlayers_inSnapWinScr <- DefPlayers_inSnap[DefPlayers_inSnap$success == 0,]
 #DefPlayers_inSnapWorst <- DefPlayers_inSnap[DefPlayers_inSnap$epa > 0.97,]
 DefPlayers_inSnapBest %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 15)) + #очистка
-  labs(title="DefPlayers_inSnapBest NEW")
+  labs(title="DefPlayers_inSnapBest")
+DefPlayers_inSnapWinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 15)) + #очистка
+  labs(title="DefPlayers_inSnapWinScr")
 
 ##### У нас получилось учесть всех защитников для обоих команд
 
@@ -134,189 +150,233 @@ attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(playId) FROM play
 attackTypes
 
 # I_FORM
-def_ag_I_FORM_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+def_ag_I_FORM <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'I_FORM'")
-summary(def_ag_I_FORM_1)
+summary(def_ag_I_FORM)
 
-def_ag_I_FORM_1_Best <- def_ag_I_FORM_1[def_ag_I_FORM_1$epa < -0.51,]
-#def_ag_I_FORM_1_Worst <- def_ag_I_FORM_1[def_ag_I_FORM_1$epa > 1.13,]
+def_ag_I_FORM_Best <- def_ag_I_FORM[def_ag_I_FORM$epa < -0.51,]
+def_ag_I_FORM_WinScr <- def_ag_I_FORM[def_ag_I_FORM$success == 0,]
+#def_ag_I_FORM_Worst <- def_ag_I_FORM[def_ag_I_FORM$epa > 1.13,]
 
-def_ag_I_FORM_1_Best %>%
+def_ag_I_FORM_Best %>%
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_I_FORM_1_Best")
+  labs(title="def_ag_I_FORM_Best")
+def_ag_I_FORM_WinScr %>%
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_I_FORM_BestWinScr")
 
 
 # SINGLEBACK
-def_ag_SINGLEBACK_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+def_ag_SINGLEBACK <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'SINGLEBACK'")
-summary(def_ag_SINGLEBACK_1)
-def_ag_SINGLEBACK_1_Best <- def_ag_SINGLEBACK_1[def_ag_SINGLEBACK_1$epa < -0.53,]
-#def_ag_SINGLEBACK_1_Worst <- def_ag_SINGLEBACK_1[def_ag_SINGLEBACK_1$epa > 1.10,]
+summary(def_ag_SINGLEBACK)
+def_ag_SINGLEBACK_Best <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$epa < -0.53,]
+def_ag_SINGLEBACK_WinScr <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$success == 0,]
+#def_ag_SINGLEBACK_Worst <- def_ag_SINGLEBACK[def_ag_SINGLEBACK$epa > 1.10,]
 
-def_ag_SINGLEBACK_1_Best %>%
+def_ag_SINGLEBACK_Best %>%
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
   labs(title="def_ag_SINGLEBACK_Best")
 
+def_ag_SINGLEBACK_WinScr %>%
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_SINGLEBACK_WinScr")
+
 
 # SHOTGUN
-def_ag_SHOTGUN_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+def_ag_SHOTGUN <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'SHOTGUN'")
-summary(def_ag_SHOTGUN_1)
-def_ag_SHOTGUN_1_Best <- def_ag_SHOTGUN_1[def_ag_SHOTGUN_1$epa < -0.84,]
-#def_ag_SHOTGUN_1_Worst <- def_ag_SHOTGUN_1[def_ag_SHOTGUN_1$epa > 0.90,]
-def_ag_SHOTGUN_1_Best %>%
+summary(def_ag_SHOTGUN)
+def_ag_SHOTGUN_Best <- def_ag_SHOTGUN[def_ag_SHOTGUN$epa < -0.84,]
+def_ag_SHOTGUN_WinScr <- def_ag_SHOTGUN[def_ag_SHOTGUN$success == 0,]
+#def_ag_SHOTGUN_Worst <- def_ag_SHOTGUN[def_ag_SHOTGUN$epa > 0.90,]
+def_ag_SHOTGUN_Best %>%
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
   labs(title="def_ag_SHOTGUN_Best")
+def_ag_SHOTGUN_WinScr %>%
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_SHOTGUN_WinScr")
 
 # PISTOL
-def_ag_PISTOL_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+def_ag_PISTOL <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'PISTOL'")
-summary(def_ag_PISTOL_1)
-def_ag_PISTOL_1_Best <- def_ag_PISTOL_1[def_ag_PISTOL_1$epa < -0.59,]
-#def_ag_PISTOL_1_Worst <- def_ag_PISTOL_1[def_ag_PISTOL_1$epa > 1.26,]
-def_ag_PISTOL_1_Best %>%
+summary(def_ag_PISTOL)
+def_ag_PISTOL_Best <- def_ag_PISTOL[def_ag_PISTOL$epa < -0.59,]
+def_ag_PISTOL_WinScr <- def_ag_PISTOL[def_ag_PISTOL$success == 0,]
+#def_ag_PISTOL_Worst <- def_ag_PISTOL[def_ag_PISTOL$epa > 1.26,]
+def_ag_PISTOL_Best %>%
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.3, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_PISTOL_Best")
+def_ag_PISTOL_WinScr %>%
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_PISTOL_Best")
+  labs(title="def_ag_PISTOL_WinScr")
 
-# WILDCAT #more weeks # lowPending 3.1
-def_ag_WILDCAT_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+# WILDCAT 
+def_ag_WILDCAT <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'WILDCAT'")
-summary(def_ag_WILDCAT_1)
-def_ag_WILDCAT_1_Best <- def_ag_WILDCAT_1[def_ag_WILDCAT_1$epa < -0.80,] # lowPending 3.1
-#def_ag_WILDCAT_1_Worst <- def_ag_WILDCAT_1[def_ag_WILDCAT_1$epa > 0.50,] # lowPending 3.1
-def_ag_WILDCAT_1_Best %>% # lowPending 3.1
+summary(def_ag_WILDCAT)
+def_ag_WILDCAT_Best <- def_ag_WILDCAT[def_ag_WILDCAT$epa < -0.80,]
+def_ag_WILDCAT_WinScr <- def_ag_WILDCAT[def_ag_WILDCAT$success == 0,]
+#def_ag_WILDCAT_Worst <- def_ag_WILDCAT[def_ag_WILDCAT$epa > 0.50,] 
+def_ag_WILDCAT_Best %>%
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="def_ag_WILDCAT_1")
+  labs(title="def_ag_WILDCAT")
+def_ag_WILDCAT_WinScr %>%
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_WILDCAT_WinScr")
 
-# JUMBO #Pending 3.1
-def_ag_JUMBO_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+# JUMBO 
+def_ag_JUMBO <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'JUMBO'")
-summary(def_ag_JUMBO_1)
-def_ag_JUMBO_1_Best <- def_ag_JUMBO_1[def_ag_JUMBO_1$epa < -0.31,] # lowPending 3.1
-#def_ag_JUMBO_1_Worst <- def_ag_JUMBO_1[def_ag_JUMBO_1$epa > 1.38,] # lowPending 3.1
-def_ag_JUMBO_1_Best %>% # lowPending 3.1
+summary(def_ag_JUMBO)
+def_ag_JUMBO_Best <- def_ag_JUMBO[def_ag_JUMBO$epa < -0.31,]
+def_ag_JUMBO_WinScr <- def_ag_JUMBO[def_ag_JUMBO$success == 0,]
+#def_ag_JUMBO_Worst <- def_ag_JUMBO[def_ag_JUMBO$epa > 1.38,] 
+def_ag_JUMBO_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
   labs(title="def_ag_JUMBO_Best")
+def_ag_JUMBO_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_JUMBO_WinScr")
 
 # EMPTY
-def_ag_EMPTY_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
+def_ag_EMPTY <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.offenseFormation = 'EMPTY'")
-summary(def_ag_EMPTY_1)
-def_ag_EMPTY_1_Best <- def_ag_EMPTY_1[def_ag_EMPTY_1$epa < -0.85,]
-#def_ag_EMPTY_1_Worst <- def_ag_EMPTY_1[def_ag_EMPTY_1$epa > 1.04,]
-def_ag_EMPTY_1_Best %>% 
+summary(def_ag_EMPTY)
+def_ag_EMPTY_Best <- def_ag_EMPTY[def_ag_EMPTY$epa < -0.85,]
+def_ag_EMPTY_WinScr <- def_ag_EMPTY[def_ag_EMPTY$success == 0,]
+#def_ag_EMPTY_Worst <- def_ag_EMPTY[def_ag_EMPTY$epa > 1.04,]
+def_ag_EMPTY_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
   labs(title="def_ag_EMPTY_Best")
+def_ag_EMPTY_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="def_ag_EMPTY_WinScr")
 
 ######################################################################################################################
 ### разные по ярдлиниям 
 # 0-10
-def_yl_0_10_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS
+def_yl_0_10 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                   JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 0 AND fS.yardlineNumber <= 10")
-summary(def_yl_0_10_1)
-def_yl_0_10_1_Best <- def_yl_0_10_1[def_yl_0_10_1$epa < -0.55,]
-#def_yl_0_10_1_Worst <- def_yl_0_10_1[def_yl_0_10_1$epa > 1.45,]
-def_yl_0_10_1_Best %>% 
+summary(def_yl_0_10)
+def_yl_0_10_Best <- def_yl_0_10[def_yl_0_10$epa < -0.55,]
+def_yl_0_10_WinScr <- def_yl_0_10[def_yl_0_10$success == 0,]
+#def_yl_0_10_Worst <- def_yl_0_10[def_yl_0_10$epa > 1.45,]
+def_yl_0_10_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best right def on yardline 0-10")
+  labs(title="Best def on yardline 0-10")
+def_yl_0_10_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="Win def on yardline 0-10")
 
 # 10-20
-def_yl_10_20_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS
+def_yl_10_20 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                   JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 10 AND fS.yardlineNumber <= 20")
-summary(def_yl_10_20_1)
-def_yl_10_20_1_Best <- def_yl_10_20_1[def_yl_10_20_1$epa < -0.72,]
-#def_yl_10_20_1_Worst <- def_yl_10_20_1[def_yl_10_20_1$epa > 0.99,]
-def_yl_10_20_1_Best %>% 
+summary(def_yl_10_20)
+def_yl_10_20_Best <- def_yl_10_20[def_yl_10_20$epa < -0.72,]
+def_yl_10_20_WinScr <- def_yl_10_20[def_yl_10_20$success == 0,]
+#def_yl_10_20_Worst <- def_yl_10_20[def_yl_10_20$epa > 0.99,]
+def_yl_10_20_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best right def on yardline 10-20")
+  labs(title="Best def on yardline 10-20")
+def_yl_10_20_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="Win def on yardline 10-20")
 
 # 20-35
-
-def_yl_20_35_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS
+def_yl_20_35 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                   JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 20 AND fS.yardlineNumber <= 35")
-summary(def_yl_20_35_1)
-def_yl_20_35_1_Best <- def_yl_20_35_1[def_yl_20_35_1$epa < -0.77,]
-#def_yl_20_35_1_Worst <- def_yl_20_35_1[def_yl_20_35_1$epa > 0.94,]
-def_yl_20_35_1_Best %>% 
+summary(def_yl_20_35)
+def_yl_20_35_Best <- def_yl_20_35[def_yl_20_35$epa < -0.77,]
+def_yl_20_35_WinScr <- def_yl_20_35[def_yl_20_35$success == 0,]
+#def_yl_20_35_Worst <- def_yl_20_35[def_yl_20_35$epa > 0.94,]
+def_yl_20_35_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best right def on yardline 20-35")
+  labs(title="Best def on yardline 20-35")
+def_yl_20_35_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="Win def on yardline 20-35")
 
 # 35-50
-def_yl_35_50_1 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-                                  w.gameId, w.team, w.playDirection  FROM football_inSnap1 as fS
+def_yl_35_50 <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                  w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
                                   JOIN allWeeks as w ON fS.gameId = w.gameId
                                   AND fS.playId = w.playId WHERE w.event = 'ball_snap'
                                   AND w.team NOT IN(fS.possessionTeam, 'football')
                                   AND fS.yardlineNumber > 35 AND fS.yardlineNumber <= 50")
-summary(def_yl_35_50_1)
-def_yl_35_50_1_Best <- def_yl_35_50_1[def_yl_35_50_1$epa < -0.79,]
-#def_yl_35_50_1_Worst <- def_yl_35_50_1[def_yl_35_50_1$epa > 0.94,]
-def_yl_35_50_1_Best %>% 
+summary(def_yl_35_50)
+def_yl_35_50_Best <- def_yl_35_50[def_yl_35_50$epa < -0.79,]
+def_yl_35_50_WinScr <- def_yl_35_50[def_yl_35_50$success == 0,]
+#def_yl_35_50_Worst <- def_yl_35_50[def_yl_35_50$epa > 0.94,]
+def_yl_35_50_Best %>% 
   ggplot(aes(x = x_rel, y = y_rel)) +
   geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-  labs(title="Best right def on yardline 35-50")
+  labs(title="Best def on yardline 35-50")
+def_yl_35_50_WinScr %>% 
+  ggplot(aes(x = x_rel, y = y_rel)) +
+  geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+  labs(title="Win def on yardline 35-50")
 
 
 
-# Учесть под разные типы расположения! Какой лучше выбрать и как лучше делать под определенное расположение
-# например WILDCAT #Pending1
 
-# Pending2 для разных типов игроков
+# сравнить Worst
+# сделать по play Result, сравнить #Done
 
-# Pending3 в games есть homeTeamAbbr, выделять команду можно по нему
-# То есть w.playDirection = 'right' AND  x_rel >= 0 заменится на w.замененный team из homeTeamAbbr != p.possessionTeam
-
-#Pending4 сделать для всех week
-
-
-
-###HEATMAP + поле 
-# playsWeek1 %>%
-#   ggplot(aes(x = x_cor, y = y_cor)) +
-#   geom_density2d_filled() +
-#   theme(legend.position = "none") + add_field()
-# Pending
+# Pending2 для разных типов игроков!!! можно для разных типов атак просто выяснить
 
 
 # end
 
 dbDisconnect(con)
+
+
 ```
 
 
