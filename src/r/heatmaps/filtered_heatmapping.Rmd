@@ -9,6 +9,7 @@ output:
 
 ```{r all, include=TRUE}
 
+
 # setup
 
 #install.packages("RSQLite")
@@ -127,18 +128,34 @@ relGraphs <- function(df, strBest, strWin, strBestWin){
   dfBest <- df[df$epa < summary(df$epa)[[2]],]
   dfWin <- df[df$success == 0,]
   dfBestWin <- df[df$epa < summary(df$epa)[[2]] & df$success == 0,]
-  dfBestPlot <- dfBest %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
-    labs(title=strBest)
-  dfWinPlot <- dfWin %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
-    labs(title=strWin)
-  dfBestWin <- dfBestWin %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-    labs(title=strBestWin)
+  
+  if(nrow(dfBest) > 1){
+    dfBestPlot <- dfBest %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strBest)
+  } else {
+    dfBestPlot <- dfBest[,c(2,3)]
+  }
+  
+  if(nrow(dfWin) > 1){
+    dfWinPlot <- dfWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strWin)
+  } else {
+    dfWinPlot <- dfWin[,c(2,3)]
+  }
+  
+  if(nrow(dfBestWin) > 1){
+    dfBestWin <- dfBestWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+      labs(title=strBestWin)
+  } else {
+    dfBestWin <- dfBestWin[,c(2,3)]
+  }
+
   return (list(dfBestPlot, dfWinPlot, dfBestWin))
 }
 # EXAMPLE: plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
@@ -269,20 +286,21 @@ plots[[3]]
 ####################################################################################
 ##### DIFFERENT TYPES OF ролям #####################################################
 ### разные по ролям ####### UNIVERSAL
-roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(nflId)) as popularity FROM allWeeks
+roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(playId)) as popularity FROM allWeeks
                                 GROUP BY position ORDER BY popularity DESC")
 roleTypes
-######
-### WR
-WR_def_pos <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+
+for (i in 1:(nrow(roleTypes))) {
+  strType <- roleTypes[i,1]
+  i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
                                       JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
                                       WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
-                                      AND w.position = 'WR'")
-plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
-plots[[3]]
-
-
+                                      AND w.position = '", strType, "'"))
+  plots <- relGraphs(i_def_pos, paste0(strType, "_def_posBest"),
+                     paste0(strType, "_def_posWin"), paste0(strType, "_def_posBestWin"))
+  print(plots[[3]])
+}
 
 
 
@@ -290,9 +308,29 @@ plots[[3]]
 attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(DISTINCT(playId)) as popularity FROM plays
                                 GROUP BY offenseFormation ORDER BY popularity DESC")
 attackTypes
-### разные по ролям ####### AGAINST POPULAR TACTICS
-### SHOTGUN
-### SINGLEBACK
+
+####################################################################################
+##### DIFFERENT TYPES OF ROLES and offense tactics #################################
+### разные по ролям ####### TACTIC Relative
+
+
+for (i in 1:(nrow(attackTypes))) {
+  strAType <- attackTypes[i,1]
+  for (j in 1:(nrow(roleTypes))) {
+    strType <- roleTypes[j,1]
+    i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                        w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
+                                        JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                        WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
+                                        AND w.position = '", strType, "'", "AND fS.offenseFormation = '", strAType, "'"))
+    plots <- relGraphs(i_def_pos, paste0(strAType, "_", strType, "_def_posBest"),
+                       paste0(strAType, "_", strType, "_def_posWin"), paste0(strAType, "_", strType, "_def_posBestWin"))
+    print(plots[[3]])
+  }
+}
+
+### То что некоторые пустые это нормально, ролей много, некоторые тактики и роли непопулярны
+
 
 
 ###### Популярные тактики по ярдлиниям c учетом на чьей стороне поля!
@@ -306,6 +344,7 @@ attackTypes
 # end
 
 dbDisconnect(con)
+
 
 
 ```

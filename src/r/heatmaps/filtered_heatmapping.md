@@ -364,18 +364,34 @@ relGraphs <- function(df, strBest, strWin, strBestWin){
   dfBest <- df[df$epa < summary(df$epa)[[2]],]
   dfWin <- df[df$success == 0,]
   dfBestWin <- df[df$epa < summary(df$epa)[[2]] & df$success == 0,]
-  dfBestPlot <- dfBest %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
-    labs(title=strBest)
-  dfWinPlot <- dfWin %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
-    labs(title=strWin)
-  dfBestWin <- dfBestWin %>% 
-    ggplot(aes(x = x_rel, y = y_rel)) +
-    geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
-    labs(title=strBestWin)
+  
+  if(nrow(dfBest) > 1){
+    dfBestPlot <- dfBest %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strBest)
+  } else {
+    dfBestPlot <- dfBest[,c(2,3)]
+  }
+  
+  if(nrow(dfWin) > 1){
+    dfWinPlot <- dfWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strWin)
+  } else {
+    dfWinPlot <- dfWin[,c(2,3)]
+  }
+  
+  if(nrow(dfBestWin) > 1){
+    dfBestWin <- dfBestWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + #очистка
+      labs(title=strBestWin)
+  } else {
+    dfBestWin <- dfBestWin[,c(2,3)]
+  }
+
   return (list(dfBestPlot, dfWinPlot, dfBestWin))
 }
 # EXAMPLE: plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
@@ -562,49 +578,77 @@ plots[[3]]
 ####################################################################################
 ##### DIFFERENT TYPES OF ролям #####################################################
 ### разные по ролям ####### UNIVERSAL
-roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(nflId)) as popularity FROM allWeeks
+roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(playId)) as popularity FROM allWeeks
                                 GROUP BY position ORDER BY popularity DESC")
 roleTypes
 ```
 
     ##    position popularity
-    ## 1        WR        226
-    ## 2        CB        196
-    ## 3        RB        139
-    ## 4        TE        128
-    ## 5       OLB        102
-    ## 6        QB         71
-    ## 7        FS         63
-    ## 8       ILB         56
-    ## 9        SS         55
-    ## 10       LB         54
-    ## 11       DE         51
-    ## 12       DB         50
-    ## 13      MLB         29
-    ## 14       DT         27
-    ## 15       FB         16
-    ## 16        P         13
-    ## 17       LS         12
-    ## 18        S          8
-    ## 19       NT          6
-    ## 20       HB          6
-    ## 21        K          5
-    ## 22       DL          1
-    ## 23                   0
+    ## 1        QB       4592
+    ## 2                 4592
+    ## 3        WR       4590
+    ## 4        CB       4590
+    ## 5        TE       4577
+    ## 6        RB       4561
+    ## 7       OLB       4444
+    ## 8        FS       4371
+    ## 9        SS       4271
+    ## 10      ILB       3948
+    ## 11       LB       3608
+    ## 12      MLB       3309
+    ## 13       DB       3058
+    ## 14        S       1367
+    ## 15       HB        590
+    ## 16       FB        580
+    ## 17       DE        137
+    ## 18       DL         37
+    ## 19       DT         23
+    ## 20        P         16
+    ## 21       LS         16
+    ## 22       NT          5
+    ## 23        K          5
 
 ``` r
-######
-### WR
-WR_def_pos <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+for (i in 1:(nrow(roleTypes))) {
+  strType <- roleTypes[i,1]
+  i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
                                       JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
                                       WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
-                                      AND w.position = 'WR'")
-plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
-plots[[3]]
+                                      AND w.position = '", strType, "'"))
+  plots <- relGraphs(i_def_pos, paste0(strType, "_def_posBest"),
+                     paste0(strType, "_def_posWin"), paste0(strType, "_def_posBestWin"))
+  print(plots[[3]])
+}
 ```
 
-![](filtered_heatmapping_files/figure-gfm/all-13.png)<!-- -->
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-13.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-14.png)<!-- -->
+
+    ##   x_rel y_rel
+    ## 1 59.05  5.14
+
+![](filtered_heatmapping_files/figure-gfm/all-15.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-16.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-17.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-18.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-19.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-20.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-21.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-22.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-23.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-24.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-25.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-26.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ##   x_rel y_rel
+    ## 5  1.05 -3.04
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
 
 ``` r
 ##### DETECT POP TACTICS
@@ -624,9 +668,301 @@ attackTypes
     ## 8          WILDCAT         36
 
 ``` r
-### разные по ролям ####### AGAINST POPULAR TACTICS
-### SHOTGUN
-### SINGLEBACK
+####################################################################################
+##### DIFFERENT TYPES OF ROLES and offense tactics #################################
+### разные по ролям ####### TACTIC Relative
+
+
+for (i in 1:(nrow(attackTypes))) {
+  strAType <- attackTypes[i,1]
+  for (j in 1:(nrow(roleTypes))) {
+    strType <- roleTypes[j,1]
+    i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                        w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
+                                        JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                        WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
+                                        AND w.position = '", strType, "'", "AND fS.offenseFormation = '", strAType, "'"))
+    plots <- relGraphs(i_def_pos, paste0(strAType, "_", strType, "_def_posBest"),
+                       paste0(strAType, "_", strType, "_def_posWin"), paste0(strAType, "_", strType, "_def_posBestWin"))
+    print(plots[[3]])
+  }
+}
+```
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-27.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-28.png)<!-- -->
+
+    ##   x_rel y_rel
+    ## 1 59.05  5.14
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-29.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-30.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-31.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-32.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-33.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-34.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-35.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-36.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-37.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-38.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-39.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ##   x_rel y_rel
+    ## 2  1.05 -3.04
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-40.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-41.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-42.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-43.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-44.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-45.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-46.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-47.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-48.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-49.png)<!-- -->
+
+    ##   x_rel y_rel
+    ## 2  1.16 -0.59
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-50.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-51.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-52.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-53.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-54.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-55.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-56.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-57.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-58.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-59.png)<!-- -->
+
+    ##   x_rel y_rel
+    ## 3  0.89 -0.49
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-60.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-61.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-62.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-63.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-64.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-65.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-66.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-67.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-68.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-69.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-70.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-71.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-72.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-73.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-74.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-75.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-76.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-77.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-78.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-79.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-80.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-81.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-82.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-83.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-84.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-85.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-86.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-87.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-88.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-89.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-90.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-91.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-92.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-93.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-94.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-95.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-96.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-97.png)<!-- -->
+
+    ##   x_rel y_rel
+    ## 1  6.28  4.61
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ##   x_rel y_rel
+    ## 1  4.27 -0.63
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-98.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+![](filtered_heatmapping_files/figure-gfm/all-99.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-100.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-101.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-102.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-103.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-104.png)<!-- -->![](filtered_heatmapping_files/figure-gfm/all-105.png)<!-- -->
+
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+    ## [1] x_rel y_rel
+    ## <0 rows> (or 0-length row.names)
+
+``` r
+### То что некоторые пустые это нормально, ролей много, некоторые тактики и роли непопулярны
+
 
 
 ###### Популярные тактики по ярдлиниям c учетом на чьей стороне поля!
