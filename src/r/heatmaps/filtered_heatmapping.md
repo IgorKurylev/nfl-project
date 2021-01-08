@@ -51,10 +51,22 @@ library(raster)
     ##     select
 
 ``` r
+library(viridis)
+```
+
+    ## Loading required package: viridisLite
+
+``` r
+library("factoextra")
+```
+
+    ## Welcome! Want to learn more? See two factoextra-related books at https://goo.gl/ve3WBa
+
+``` r
 knitr::opts_knit$set(root.dir = "D:/MyFilesDesktop/Student/7SEM/DataScience/DS_Project")
 ```
 
-\#Filling DataBase
+\#Filling DataBase BEGIN
 
 ``` r
 con <- dbConnect(RSQLite::SQLite(), ":memory:")
@@ -204,7 +216,107 @@ dbListTables(con)
 #dbRemoveTable(con, "allWeeks")
 ```
 
-# Modify play table team column
+Осмотр данных
+
+``` r
+testTeam <- head(dbGetQuery(con, "SELECT DISTINCT w.nflId, w.team FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
+                                      AND p.playId = w.playId WHERE w.gameId = 2018090600
+                                      ORDER BY w.nflId"),12)#w.event = 'ball_snap'")
+testTeam
+```
+
+    ##      nflId     team
+    ## 1       NA football
+    ## 2      310     away
+    ## 3    79848     home
+    ## 4  2495454     away
+    ## 5  2495613     home
+    ## 6  2506467     home
+    ## 7  2507763     home
+    ## 8  2507828     away
+    ## 9  2532842     home
+    ## 10 2533040     away
+    ## 11 2534832     home
+    ## 12 2539291     home
+
+``` r
+# этот запрос дал нам понять, что команда у игрока во время игры не меняется, но мы знаем что меняется сторона
+
+testFrames <- head(dbGetQuery(con, "SELECT w.frameId, w.playId, COUNT(w.nflId), COUNT(w.displayName) FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
+                                      AND p.playId = w.playId WHERE w.gameId = 2018090600
+                                      GROUP BY w.frameId, w.playId ORDER BY w.playId"),60)#w.event = 'ball_snap'")
+options(max.print=10000)
+testFrames
+```
+
+    ##    frameId playId COUNT(w.nflId) COUNT(w.displayName)
+    ## 1        1     75             13                   14
+    ## 2        2     75             13                   14
+    ## 3        3     75             13                   14
+    ## 4        4     75             13                   14
+    ## 5        5     75             13                   14
+    ## 6        6     75             13                   14
+    ## 7        7     75             13                   14
+    ## 8        8     75             13                   14
+    ## 9        9     75             13                   14
+    ## 10      10     75             13                   14
+    ## 11      11     75             13                   14
+    ## 12      12     75             13                   14
+    ## 13      13     75             13                   14
+    ## 14      14     75             13                   14
+    ## 15      15     75             13                   14
+    ## 16      16     75             13                   14
+    ## 17      17     75             13                   14
+    ## 18      18     75             13                   14
+    ## 19      19     75             13                   14
+    ## 20      20     75             13                   14
+    ## 21      21     75             13                   14
+    ## 22      22     75             13                   14
+    ## 23      23     75             13                   14
+    ## 24      24     75             13                   14
+    ## 25      25     75             13                   14
+    ## 26      26     75             13                   14
+    ## 27      27     75             13                   14
+    ## 28      28     75             13                   14
+    ## 29      29     75             13                   14
+    ## 30      30     75             13                   14
+    ## 31      31     75             13                   14
+    ## 32      32     75             13                   14
+    ## 33      33     75             13                   14
+    ## 34      34     75             13                   14
+    ## 35      35     75             13                   14
+    ## 36      36     75             13                   14
+    ## 37      37     75             13                   14
+    ## 38      38     75             13                   14
+    ## 39      39     75             13                   14
+    ## 40      40     75             13                   14
+    ## 41      41     75             13                   14
+    ## 42      42     75             13                   14
+    ## 43      43     75             13                   14
+    ## 44      44     75             13                   14
+    ## 45      45     75             13                   14
+    ## 46      46     75             13                   14
+    ## 47      47     75             13                   14
+    ## 48      48     75             13                   14
+    ## 49      49     75             13                   14
+    ## 50      50     75             13                   14
+    ## 51      51     75             13                   14
+    ## 52      52     75             13                   14
+    ## 53      53     75             13                   14
+    ## 54      54     75             13                   14
+    ## 55      55     75             13                   14
+    ## 56      56     75             13                   14
+    ## 57      57     75             13                   14
+    ## 58      58     75             13                   14
+    ## 59      59     75             13                   14
+    ## 60       1    146             13                   14
+
+``` r
+# этот запрос показал, что количество игроков каждом фрейме одного момента одинаковое, поэтому смело можно брать
+# ball_snap кадр и мы получим данные о всех зафиксированных игроках в моменте
+```
+
+Modify play table team column
 
 ``` r
 ################################################################################################################
@@ -247,7 +359,7 @@ testTeamPlay
     ## 1           away                    3973
     ## 2           home                    3992
 
-# New ball snap table
+New ball snap table
 
 ``` r
 #######################################################################################################################
@@ -270,16 +382,57 @@ dbListFields(con, "football_inSnap1")
 #dbRemoveTable(con, "football_inSnap1")
 ```
 
-# Filling DataBase End
+# Filling DataBase END
+
+# Функции построения базовых heatmaps и базовой выборки
 
 ``` r
-######## FUNCTIONS #####################################################################################################
-############################ PLOT FUNC DEF #####################
+# Для защиты
 relGraphs <- function(df, strBest, strWin, strBestWin){
   summary(df)
   dfBest <- df[df$epa < summary(df$epa)[[2]],]
   dfWin <- df[df$success == 0,]
   dfBestWin <- df[df$epa < summary(df$epa)[[2]] & df$success == 0,]
+  
+  if(nrow(dfBest) > 1){
+    dfBestPlot <- dfBest %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strBest)
+  } else {
+    dfBestPlot <- list(dfBest[,c(2,3)], strBest) 
+  }
+  
+  if(nrow(dfWin) > 1){
+    dfWinPlot <- dfWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(contour_var = "ndensity", breaks = seq(0.2, 1.0, length.out = 10)) + 
+      labs(title=strWin)
+  } else {
+    dfWinPlot <- list(dfWin[,c(2,3)], strWin)
+  }
+  
+  if(nrow(dfBestWin) > 1){
+    dfBestWinPlot <- dfBestWin %>% 
+      ggplot(aes(x = x_rel, y = y_rel)) +
+      geom_density2d_filled(aes(fill = ..level..),
+                            contour_var = "ndensity",
+                            breaks = seq(0.2, 1.0, length.out = 10)
+                            )
+      labs(title=strBestWin)
+  } else {
+    dfBestWinPlot <- list(dfBestWin[,c(2,3)], strBestWin)
+  }
+
+  return (list(dfBestPlot, dfWinPlot, dfBestWinPlot, dfBestWin))
+}
+
+# Для атаки
+relGraphsAttack <- function(df, strBest, strWin, strBestWin){
+  summary(df)
+  dfBest <- df[df$epa > summary(df$epa)[[5]],]
+  dfWin <- df[df$success == 1,]
+  dfBestWin <- df[df$epa > summary(df$epa)[[5]] & df$success == 1,]
   
   if(nrow(dfBest) > 1){
     dfBestPlot <- dfBest %>% 
@@ -308,40 +461,74 @@ relGraphs <- function(df, strBest, strWin, strBestWin){
       geom_density2d_filled(aes(fill = ..level..),
                             contour_var = "ndensity",
                             breaks = seq(0.2, 1.0, length.out = 10)
-                            ) + #очистка
+      ) + #очистка
       labs(title=strBestWin)
   } else {
     dfBestWinPlot <- list(dfBestWin[,c(2,3)], strBestWin)
   }
-
+  
   return (list(dfBestPlot, dfWinPlot, dfBestWinPlot, dfBestWin))
 }
 # EXAMPLE: plots <- relGraphs(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
 # plots
 # or plots[[1]]
+```
 
+# Проверка изменений данных
 
-########### Функция извлечения лучших координат
-extractMaxDensityXYrel <- function(dataframe){
-  
+``` r
+#### теперь пробуем соединить по команде (home / away) ####
+# Красота
+DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                      w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS
+                                      JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                      WHERE w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')")
+
+plots <- relGraphs(DefPlayers_inSnap, "DefPlayers_inSnapBest", "DefPlayers_inSnapWinScr","DefPlayers_inSnapBestWin")
+plots[[3]]
+```
+
+![](filtered_heatmapping_files/figure-gfm/data7-1.png)<!-- -->
+
+``` r
+##### У нас получилось учесть всех защитников для обоих команд
+```
+
+# Функция выборки ключевых точек
+
+``` r
+extractMultiMaxDensityXYrelCLUST <- function(dataframe){
+  rel_max <- data.frame(x=double(),
+                        y=double(),
+                        density=double())
+  #dataframe <- dfBest
   kde <- kde2d(dataframe$x_rel, dataframe$y_rel, n = 100)
-  #contour(kde, xlab = "x_rel", ylab = "y_rel" )
   r <- raster(kde)
   dfKde <- as.data.frame(r, xy=T) #layer == density
   xyD <- aggregate(dfKde$layer, by = list(dfKde$x, dfKde$y), FUN = max)
   names(xyD)[names(xyD) == "x"] <- "density"
   names(xyD)[names(xyD) == "Group.1"] <- "x"
   names(xyD)[names(xyD) == "Group.2"] <- "y"
-  rel_max <- xyD[xyD$density == max(xyD$density),]
+  
+  dens60 <- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 75/100 ## Look
+  xyDmax <- xyD[xyD$density > dens60,]
+  kmClus <- eclust(xyDmax[,c(1,2)], "kmeans", nstart = nrow(xyDmax), graph = FALSE, nboot = 10)
+  
+  for(i in unique(kmClus$cluster)){
+    clusterized <- subset(cbind(xyDmax, cluster = kmClus$cluster), cluster == i)
+    dens90c <- min(clusterized$density) + (max(clusterized$density) - min(clusterized$density)) * 90/100
+    clusterized <- subset(clusterized, density > dens90c)
+    max_point <- data.frame(x = summary(clusterized$x)[[3]], y = summary(clusterized$y)[[3]], density = 1)
+    rel_max <- rbind(rel_max, max_point)
+  }
+  
+  #rel_max <- as.data.frame(kmClus$centers)
+
   return(rel_max)
 }
-## EXAMPLE
-# yardsHeat <- printYardsGraph(85, 100)
-# rel_max <- extractMaxDensityXYrel(yardsHeat[[4]])
-# x_rel_max <- rel_max$x
-# y_rel_max <- rel_max$y
-# yardsHeat[[3]] + geom_vline(xintercept = x_rel_max) + geom_hline(yintercept = y_rel_max)
 ```
+
+\#Реальное использование BEGIN
 
 # Общие heatmaps лучшего расположения против различных типов атак по их популярности
 
@@ -450,10 +637,7 @@ plots[[3]]
 # Общие heatmaps лучшего расположения защиты по ярдлиниям
 
 ``` r
-########################################################################################
-##### DIFFERENT TYPES OF YARDLINES #####################################################
-### разные по ярдлиниям
-###### AUTO YARDS GRAPH FUNC ########## 
+# Для защиты по ярдлинии от тачдауна
 printYardsGraph <- function(strYardsfrom, strYardsto){
     strYardsfrom <- toString(strYardsfrom)
     strYardsto <- toString(strYardsto)
@@ -469,8 +653,9 @@ printYardsGraph <- function(strYardsfrom, strYardsto){
                        paste0("def_yft_", strYardsfrom, "_", strYardsto, "_BestWin"))
     print(plots[[3]]) # BestWin
     return(plots)
-}  
+}
 
+##### DIFFERENT TYPES OF YARDLINES #####################################################
 
 # 0-10
 yardsHeat <- printYardsGraph(0, 10)
@@ -520,16 +705,15 @@ yardsHeat <- printYardsGraph(85, 100)
 
 ![](filtered_heatmapping_files/figure-gfm/data9-7.png)<!-- -->
 
-# Heatmaps лучшего расположения защиты по ролям защитников
+# Лучшее расположение защиты по ролям защитников
 
-  - функции
+  - Heatmaps
 
 <!-- end list -->
 
 ``` r
-####################################################################################
-##### DIFFERENT TYPES OF ролям #####################################################
-### разные по ролям ####### UNIVERSAL
+# подготовка вспомогательного dataframe
+### разные по ролям UNIVERSAL
 roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(playId)) as popularity FROM allWeeks
                                 GROUP BY position ORDER BY popularity DESC")
 roleTypes
@@ -561,8 +745,7 @@ roleTypes
     ## 23        K          5
 
 ``` r
-####### GRAPHS BEGIN #################
-############### Функция рисования графа относительно роли (типа) игрока ################################################
+# Функция получения базовой информации относительно роли (типа) игрока
 printPlayerTypeGraph <- function(strType){
   i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
@@ -578,6 +761,8 @@ printPlayerTypeGraph <- function(strType){
   return(plots)
 }
 
+# Функция рисования heatmap относительно роли (типа) игрока и определения ключевых точек
+### Возвращает или df с полями x y type density. Если пусто то density = 0, если 1 строка, то density = 1
 playerTypeGraphDraw <- function(strType){
   playerTypeGraph <- printPlayerTypeGraph(strType)
   
@@ -587,9 +772,17 @@ playerTypeGraphDraw <- function(strType){
   
   nrowsdf <- nrow(playerTypeGraph[[4]])
   if(nrowsdf > 1){
-    rel_max <- extractMaxDensityXYrel(playerTypeGraph[[4]])
+    rel_max <- extractMultiMaxDensityXYrelCLUST(playerTypeGraph[[4]])
     rel_max$type <- strType
-    print(playerTypeGraph[[3]] + geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
+    
+    densPlot <- playerTypeGraph[[3]]
+    for (i in 1:(nrow(rel_max))) {
+      densPlot <- densPlot + geom_vline(xintercept = rel_max$x[i], colour = i) + 
+        geom_hline(yintercept = rel_max$y[i], colour = i)
+    }
+    densPlot <- densPlot + geom_point(data = rel_max, mapping = aes(x,y), color = "red", size = 5)
+    
+    print(densPlot + #geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
             labs(subtitle = paste0("x_rel_best = ", rel_max$x, " y_rel_best = ", rel_max$y)))
   } else {
     if(nrowsdf == 1){
@@ -601,18 +794,36 @@ playerTypeGraphDraw <- function(strType){
     }
     
   }
-  print(rel_max)
+  return(rel_max)
 }
 ```
 
-# Цикл по всем ролям
-
-Координаты лучшего расположения - функции
+Пример использования
 
 ``` r
-####### ONLY X Y BEGIN #############
-######################### выявление лучших позиций в виде текста для определенных ролей ###############################
+strType <- "CB"
+playerTypeGraphDraw(strType)
+```
 
+![](filtered_heatmapping_files/figure-gfm/data11-1.png)<!-- -->
+
+    ##         x         y density type
+    ## 1 1.63697 -10.63444       1   CB
+    ## 2 2.17596  10.90111       1   CB
+
+Можно автоматически в цикле
+
+    for (i in 1:(nrow(roleTypes))) {
+      strType <- roleTypes[i,1]
+      playerTypeGraphDraw(strType)
+    }
+
+  - “Тихий вариант без heatmaps” (убрать, немного переписать функцию
+    сверху return \#TODO )
+
+<!-- end list -->
+
+``` r
 ### Возвращает или df с полями x y type density. Если пусто то density = 0, если 1 строка, то density = 1
 printPlayerTypeBestPos <- function(strType){
   plots <- printPlayerTypeGraph(strType)
@@ -623,24 +834,21 @@ printPlayerTypeBestPos <- function(strType){
   
   nrowsdf <- nrow(plots[[4]])
   if(nrowsdf > 1){
-    rel_max <- extractMaxDensityXYrel(plots[[4]])
-    rel_max$type <- strType
+    rel_max <- extractMultiMaxDensityXYrelCLUST(plots[[4]])
   } else {
     if(nrowsdf == 1){
       rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
-      rel_max$type <- strType
     } else {
       rel_max <- data.frame(x = 0, y = 0, density = 0)
-      rel_max$type <- strType
+      
     }
   }
+  rel_max$type <- strType
   return(rel_max)
-}
+} 
 ```
 
-  - цикл использования
-
-<!-- end list -->
+Пример использования Можно автоматически
 
     for (i in 1:(nrow(roleTypes))) {
       strType <- roleTypes[i,1]
@@ -648,20 +856,12 @@ printPlayerTypeBestPos <- function(strType){
       print(playerTypeGraph)
     }
     
-    #### не выбирается QB потому что в защите его нет, proof:
-    # playerTypeGraphDraw("QB")
-    # i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
-    #                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
-    #                                       JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
-    #                                       WHERE w.event = 'ball_snap'",# AND w.team NOT IN(fS.possessionTeam, 'football')
-    #                                     "AND w.position = '", "QB", "'"))
-    # head(i_def_pos, 10)
-    ####### ONLY X Y END #############
+    #### Некторые не выбираются потому что в защите его нет
     
     
     ####################################################################################
 
-# Heatmaps лучшего расположения защиты по ролям и тактикам
+# Лучшее расположение защиты по ролям защитников и тактикам нападения
 
   - функции
 
@@ -685,13 +885,7 @@ attackTypes
     ## 8          WILDCAT         36
 
 ``` r
-####################################################################################
-##### DIFFERENT TYPES OF ROLES and offense tactics #################################
-### разные по ролям ####### TACTIC Relative
-
-
-####### GRAPHS BEGIN #################
-#func
+# Функция выборки общей информации
 printPlayersTypeTactics <- function(strType, strAType){
   i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                         w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
@@ -708,9 +902,10 @@ printPlayersTypeTactics <- function(strType, strAType){
   plots <- relGraphs(i_def_pos, paste0(strAType, "_", strType, "_def_posBest"),
                      paste0(strAType, "_", strType, "_def_posWin"), paste0(strAType, "_", strType, "_def_posBestWin"))
   return(plots)
-} 
+}
 
-# func
+# Функция рисования heatmap и определения ключевых точек
+### Возвращает или df с полями x y type density. Если пусто то density = 0, если 1 строка, то density = 1
 playerTypeTacticsGraphDraw <- function(strType, strAType){
   playerTypeTacticsGraph <- printPlayersTypeTactics(strType, strAType)
   if (strType == ""){
@@ -722,9 +917,16 @@ playerTypeTacticsGraphDraw <- function(strType, strAType){
   
   nrowsdf <- nrow(playerTypeTacticsGraph[[4]])
   if(nrowsdf > 1){
-    rel_max <- extractMaxDensityXYrel(playerTypeTacticsGraph[[4]])
-    print(playerTypeTacticsGraph[[3]] + geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
-            labs(subtitle = paste0("x_rel_best = ", rel_max$x, " y_rel_best = ", rel_max$y)))
+    rel_max <- extractMultiMaxDensityXYrelCLUST(playerTypeTacticsGraph[[4]])
+    densPlot <- playerTypeTacticsGraph[[3]]
+    for (i in 1:(nrow(rel_max))) {
+      densPlot <- densPlot + geom_vline(xintercept = rel_max$x[i], colour = i) + 
+        geom_hline(yintercept = rel_max$y[i], colour = i)
+    }
+    densPlot <- densPlot + geom_point(data = rel_max, mapping = aes(x,y), color = "red", size = 5)
+    
+    print(densPlot)# + #geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
+            #labs(subtitle = paste0("x_rel_best = ", rel_max$x, " y_rel_best = ", rel_max$y)))
   } else {
     if(nrowsdf == 1){
       rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
@@ -735,30 +937,48 @@ playerTypeTacticsGraphDraw <- function(strType, strAType){
   }
   rel_max$type <- strType
   rel_max$Atype <- strAType
-  print(rel_max)
+  return(rel_max)
 }
 ```
 
-  - цикл по всем
+Пример использования
 
-<!-- end list -->
+``` r
+strAType <- "SHOTGUN"
+strType <- "MLB"
+playerTypeTacticsGraphDraw(strType, strAType)
+```
 
-    #loop
+![](filtered_heatmapping_files/figure-gfm/data144-1.png)<!-- -->
+
+    ##          x         y density type   Atype
+    ## 1 4.009949 -1.462222       1  MLB SHOTGUN
+    ## 2 4.258333  1.098889       1  MLB SHOTGUN
+
+Можно автоматически
+
     for (i in 1:(nrow(attackTypes))) {
       strAType <- attackTypes[i,1]
       for (j in 1:(nrow(roleTypes))) {
         strType <- roleTypes[j,1]
-        playerTypeTacticsGraphDraw(strType, strAType)
+        rel_max <- playerTypeTacticsGraphDraw(strType, strAType)
+        print(rel_max)
+        #rbind
+        #write.csv()
       }
     }
     
-    ### То что некоторые пустые это нормально, ролей много, некоторые тактики и роли непопулярны
-    ####### GRAPHS END #################
+    strAType <- "I_FORM"
+    for (j in 1:(nrow(roleTypes))) {
+      strType <- roleTypes[j,1]
+      playerTypeGraph <- playerTypeTacticsGraphDraw(strType, strAType)
+      Idata <- rbind(Idata, playerTypeGraph)
+      print(playerTypeGraph)
+    }
 
-Координаты по тактикам и ролям (для защиты) - функции
+Тихий вариант (убрать \#TODO)
 
 ``` r
-##### ONLY X Y BEGIN ###############
 printPlayerTacticsTypeBestPos <- function(strType, strAType){
   
   plots <- printPlayersTypeTactics(strType, strAType)
@@ -772,7 +992,191 @@ printPlayerTacticsTypeBestPos <- function(strType, strAType){
   #print(plots[[3]])
   nrowsdf <- nrow(plots[[4]])
   if(nrowsdf > 1){
-    rel_max <- extractMaxDensityXYrel(plots[[4]])
+    rel_max <- extractMultiMaxDensityXYrelCLUST(plots[[4]])
+  } else {
+    if(nrowsdf == 1){
+      rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
+    } else {
+      rel_max <- data.frame(x = 0, y = 0, density = 0)
+    }
+  }
+  rel_max$type <- strType
+  rel_max$Atype <- strAType
+  return(rel_max)
+} 
+
+
+strAType <- "SHOTGUN"
+strType <- "MLB"
+printPlayerTacticsTypeBestPos(strType, strAType)
+```
+
+    ##          x         y density type   Atype
+    ## 1 4.009949 -1.462222       1  MLB SHOTGUN
+    ## 2 4.258333  1.098889       1  MLB SHOTGUN
+
+\#Используя разработанные функции легко также нарисовать и для атаки
+
+``` r
+##### DETECT POP TACTICS
+attackTypes <- dbGetQuery(con, "SELECT offenseFormation, COUNT(DISTINCT(playId)) as popularity FROM plays
+                                GROUP BY offenseFormation ORDER BY popularity DESC")
+attackTypes
+```
+
+    ##   offenseFormation popularity
+    ## 1          SHOTGUN       4320
+    ## 2       SINGLEBACK       1949
+    ## 3            EMPTY       1857
+    ## 4           I_FORM        802
+    ## 5           PISTOL        246
+    ## 6                         138
+    ## 7            JUMBO         51
+    ## 8          WILDCAT         36
+
+``` r
+###ATTACK
+printPlayersTypeTacticsAttack <- function(strType, strAType){
+  i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, -abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
+                                        w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
+                                        JOIN allWeeks as w ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                        WHERE w.event = 'ball_snap' AND w.team = fS.possessionTeam
+                                        AND w.position = '", strType, "'", "AND fS.offenseFormation = '", strAType, "'"))
+  if (strType == ""){
+    strType = "NO"
+  }
+  if (strAType == ""){
+    strAType = "NO"
+  }
+  
+  plots <- relGraphsAttack(i_def_pos, paste0(strAType, "_", strType, "_def_posBest"),
+                     paste0(strAType, "_", strType, "_def_posWin"), paste0(strAType, "_", strType, "_def_posBestWin"))
+  return(plots)
+} 
+
+# Функция рисования heatmap и определения ключевых точек
+### Возвращает или df с полями x y type density. Если пусто то density = 0, если 1 строка, то density = 1
+# ATTACK
+playerTypeTacticsGraphDrawAttack <- function(strType, strAType){
+  playerTypeTacticsGraph <- printPlayersTypeTacticsAttack(strType, strAType)
+  if (strType == ""){
+    strType = "NO"
+  }
+  if (strAType == ""){
+    strAType = "NO"
+  }
+  
+  nrowsdf <- nrow(playerTypeTacticsGraph[[4]])
+  if(nrowsdf > 1){
+    rel_max <- extractMultiMaxDensityXYrelCLUST(playerTypeTacticsGraph[[4]])
+    densPlot <- playerTypeTacticsGraph[[3]]
+    for (i in 1:(nrow(rel_max))) {
+      densPlot <- densPlot + geom_vline(xintercept = rel_max$x[i], colour = i) + 
+        geom_hline(yintercept = rel_max$y[i], colour = i)
+    }
+    densPlot <- densPlot + geom_point(data = rel_max, mapping = aes(x,y), color = "red", size = 5)
+    
+    print(densPlot + #geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
+            labs(subtitle = paste0("x_rel_best = ", rel_max$x, " y_rel_best = ", rel_max$y)))
+  } else {
+    if(nrowsdf == 1){
+      rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
+    } else {
+      rel_max <- data.frame(x = 0, y = 0, density = 0)
+    }
+    
+  }
+  rel_max$type <- strType
+  rel_max$Atype <- strAType
+  return(rel_max)
+}
+```
+
+Пример использования
+
+``` r
+strAType <- "SHOTGUN"
+strType <- "TE"
+playerTypeTacticsGraphDrawAttack(strType, strAType)
+```
+
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+    
+    ## Warning: did not converge in 10 iterations
+
+![](filtered_heatmapping_files/figure-gfm/data146-1.png)<!-- -->
+
+    ##            x         y density type   Atype
+    ## 1 -0.8355556 -5.723939       1   TE SHOTGUN
+    ## 2 -0.8877778  5.905152       1   TE SHOTGUN
+
+Можно автоматически
+
+    for (i in 1:(nrow(attackTypes))) {
+      strAType <- attackTypes[i,1]
+      for (j in 1:(nrow(roleTypes))) {
+        strType <- roleTypes[j,1]
+        playerTypeTacticsGraphDrawAttack(strType, strAType)
+      }
+    }
+    
+    
+    roleTypes <- dbGetQuery(con, "SELECT w.position, COUNT(DISTINCT(w.nflid)) as popularity FROM allWeeks as w
+                                  JOIN football_inSnap1 as fS ON fS.gameId = w.gameId AND fS.playId = w.playId
+                                  WHERE w.team = fS.possessionTeam
+                                  GROUP BY position ORDER BY popularity DESC")
+    roleTypes
+    Idata <- data.frame(x=double(),
+                        y=double(),
+                        density=double(),
+                        type=character(),
+                        Atype=character()) 
+    strAType <- "I_FORM"
+      for (j in 1:(nrow(roleTypes))) {
+        strType <- roleTypes[j,1]
+        playerTypeGraphAttack <- playerTypeTacticsGraphDrawAttack(strType, strAType)
+        
+        Idata <- rbind(Idata, subset(playerTypeGraphAttack, select = x:Atype))
+      }
+    write.csv(Idata, "IAttack.csv")
+
+Тихие варианты \#Убрать? \#TODO (В общем нужен IF в основной)
+
+``` r
+printPlayerTacticsTypeBestPos <- function(strType, strAType){
+  
+  plots <- printPlayersTypeTactics(strType, strAType)
+  if (strType == ""){
+    strType = "NO"
+  }
+  if (strAType == ""){
+    strAType = "NO"
+  }
+  
+  #print(plots[[3]])
+  nrowsdf <- nrow(plots[[4]])
+  if(nrowsdf > 1){
+    rel_max <- extractMultiMaxDensityXYrelCLUST(plots[[4]])
   } else {
     if(nrowsdf == 1){
       rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
@@ -786,7 +1190,42 @@ printPlayerTacticsTypeBestPos <- function(strType, strAType){
 } 
 ```
 
-Цикл использования по всем (осторожно)
+    #loop
+    for (i in 1:(nrow(attackTypes))) {
+      strAType <- attackTypes[i,1]
+      for (j in 1:(nrow(roleTypes))) {
+        strType <- roleTypes[j,1]
+        playerTypeGraph <- printPlayerTacticsTypeBestPos(strType, strAType)
+        print(playerTypeGraph)
+      }
+    }
+
+    ###ATTACK
+    printPlayerTacticsTypeBestPosAttack <- function(strType, strAType){
+      
+      plots <- printPlayersTypeTacticsAttack(strType, strAType)
+      if (strType == ""){
+        strType = "NO"
+      }
+      if (strAType == ""){
+        strAType = "NO"
+      }
+      
+      #print(plots[[3]])
+      nrowsdf <- nrow(plots[[4]])
+      if(nrowsdf > 1){
+        rel_max <- extractMultiMaxDensityXYrelCLUST(plots[[4]])
+      } else {
+        if(nrowsdf == 1){
+          rel_max <- data.frame(x = plots[[4]]$x_rel, y = plots[[4]]$y_rel, density = 1)
+        } else {
+          rel_max <- data.frame(x = 0, y = 0, density = 0)
+        }
+      }
+      rel_max$type <- strType
+      rel_max$Atype <- strAType
+      return(rel_max)
+    } 
 
     #loop
     for (i in 1:(nrow(attackTypes))) {
@@ -797,14 +1236,10 @@ printPlayerTacticsTypeBestPos <- function(strType, strAType){
         print(playerTypeGraph)
       }
     }
-    
-    ##### ONLY X Y END ###############
 
-``` r
-# сравнить Worst
+```` 
 
-
-
+```r
 # $$$$$$$$$$$$$$ #
 # готовые решения:
 # printPlayerTypeBestPos(strType) - возвращает лучшую позицию игрока по типу независимо от типа Атаки
@@ -814,38 +1249,79 @@ printPlayerTacticsTypeBestPos <- function(strType, strAType){
 
 #Пример использования:
 printPlayerTypeBestPos("OLB")
-```
+````
 
-    ##             x         y    density type
-    ## 4104 1.108485 -5.382929 0.04060916  OLB
+    ##          x         y density type
+    ## 1 1.108485 -5.382929       1  OLB
+    ## 2 1.108485  5.942828       1  OLB
 
 ``` r
 playerTypeGraphDraw("OLB")
 ```
 
-![](filtered_heatmapping_files/figure-gfm/data18-1.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/SUMUP-1.png)<!-- -->
 
-    ##             x         y    density type
-    ## 4104 1.108485 -5.382929 0.04060916  OLB
+    ##          x         y density type
+    ## 1 1.108485 -5.382929       1  OLB
+    ## 2 1.108485  5.942828       1  OLB
 
 ``` r
 printPlayerTacticsTypeBestPos("OLB", "SHOTGUN")
 ```
 
-    ##             x         y    density type   Atype
-    ## 4606 1.185859 -5.408485 0.03988676  OLB SHOTGUN
+    ##          x         y density type   Atype
+    ## 1 1.067273 -5.408485       1  OLB SHOTGUN
+    ## 2 1.304444  5.686515       1  OLB SHOTGUN
 
 ``` r
 playerTypeTacticsGraphDraw("OLB", "SHOTGUN")
 ```
 
-![](filtered_heatmapping_files/figure-gfm/data18-2.png)<!-- -->
+![](filtered_heatmapping_files/figure-gfm/SUMUP-2.png)<!-- -->
 
-    ##             x         y    density type   Atype
-    ## 4606 1.185859 -5.408485 0.03988676  OLB SHOTGUN
+    ##          x         y density type   Atype
+    ## 1 1.067273 -5.408485       1  OLB SHOTGUN
+    ## 2 1.304444  5.686515       1  OLB SHOTGUN
 
 ``` r
 # end
 
 dbDisconnect(con)
 ```
+
+\#TODO: - Тихие - Сравнить с Worst?
+
+    ######################################################## NOT USED BUT DONE ##############################################
+    if(FALSE){
+     #### COUNTOR EXPERIMENT
+     #################################### FUNC IT #####################
+     extractMultiMaxDensityXYrel <- function(dataframe){
+       rel_max <- data.frame(x=double(),
+                             y=double(),
+                             density=double()) 
+       
+       dataframe <- dfBest
+       kde <- kde2d(dataframe$x_rel, dataframe$y_rel, n = 100)
+       #contour(kde, xlab = "x_rel", ylab = "y_rel" )
+       r <- raster(kde)
+       dfKde <- as.data.frame(r, xy=T) #layer == density
+       xyD <- aggregate(dfKde$layer, by = list(dfKde$x, dfKde$y), FUN = max)
+       names(xyD)[names(xyD) == "x"] <- "density"
+       names(xyD)[names(xyD) == "Group.1"] <- "x"
+       names(xyD)[names(xyD) == "Group.2"] <- "y"
+       
+       #dens90 <- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 90/100 ###Pending
+       dens90 <- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 80/100 ###Pending
+       xyDmax <- xyD[xyD$density > dens90,]
+       cnt <- getContourLines(xyDmax$x, xyDmax$y, xyDmax$density, nlevels = 2)# bin = 2)
+       
+       difGID <- unique(cnt$GID)
+       
+       for (i in 1:(length(difGID))) {
+         tCnt <- cnt[cnt$GID==difGID[i],]
+         rel_max <- rbind(rel_max, data.frame(x = summary(tCnt$x)[[3]], y = summary(tCnt$y)[[3]], density = 1))
+       }
+       #rel_max <- xyD[xyD$density == max(xyD$density),]
+       return(rel_max)
+     }
+    }
