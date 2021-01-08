@@ -1,0 +1,93 @@
+---
+title: "Result"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+library(htmlwidgets)
+library(sqldf)
+```
+
+# Pass analytics
+
+Основным критерием по набору очков в атаки, является успешные передачи пасса. Перед вбросом мяча в игру, event = 'ball_snap', команда атаки выбирает комбинацию, которую они будут разыгрывать. Но не всегда получается разыграть заранее подготовленную комбинацию из-за действий защиты. QB при получении мяча анализирует поле и пытается принять наиболее правильное решение. По имеющимся данным был проведен анализ, что в большей части влияет на результат паса.
+
+На графике нанесенно распрделение пасов на дистанции от результата которая добилась команда атаки. По цветам распределны результаты паса ('event'):
+
+ - pass_arrived - пас был успешно пойман игроком защиты
+ - pass_outcome_incomplete - пас не был пойман, мяч улетел в аут
+ - pass_tipped - пас перехвачен
+ - pass_outcome_caught - пас пойман в ауте
+ - pass_outcome_interception- пас перехвачен в ауте
+
+```{r}
+plays_s <- read.csv('plays_split.csv', header = TRUE, sep=',')
+
+plays_s <- subset(plays_s, !is.na(defendersInTheBox))
+plays_s <- subset(plays_s, !is.na(numberOfPassRushers))
+plays_s <- subset(plays_s, offenseFormation != '')
+plays_s <- subset(plays_s, typeDropback != '')
+
+plays_s$counts <- 1
+plays_s$yardFromDefTouch <- 0
+plays_s$yardFromDefTouch <- plays_s$yardlineNumber
+plays_s$yardFromDefTouch[plays_s$possessionTeam == plays_s$yardlineSide] <- (100 - plays_s$yardlineNumber)
+
+plays_s$success <- 0
+plays_s$success[plays_s$playResult >= plays_s$yardsToGo] <- 1
+
+plays_s$yard_zone <- 1
+plays_s$yard_zone[plays_s$yardFromDefTouch<80] <- 2
+plays_s$yard_zone[plays_s$yardFromDefTouch<40] <- 3
+plays_s$yard_zone[plays_s$yardFromDefTouch<20] <- 4
+
+week1 <- read.csv('week1.csv', header = TRUE, sep=',')
+week1 <- data.frame(week1)
+
+week_dist_ball <- sqldf("select w2.event, w.event pass_type, w.playId, w.x xs, w.y ys, w2.x xe, w2.y ye, p.offenseFormation, p.typeDropback, p.defendersInTheBox, 
+  p.numberOfPassRushers, p.playResult, w2.gameId, p.absoluteYardlineNumber, p.yardsToGo, 
+  p.possessionTeam, w.playDirection, p.down from week1 w
+	left JOIN week1 w2 on w2.playId = w.playId and w2.gameId = w.gameId
+	JOIN plays_s p ON p.playId = w.playId and p.gameId = w.gameId
+	where (w.event = 'pass_forward' or w.event='pass_shovel') and 
+	(w2.event='pass_arrived' or w2.event='pass_tipped' or w2.event='pass_outcome_caught'  
+	or w2.event='pass_outcome_interception' or w2.event='pass_outcome_incomplete') 
+	and w.displayName='Football' and w2.displayName='Football'")
+
+week_dist_ball$dist <- sqrt((week_dist_ball$xs - week_dist_ball$xe)*(week_dist_ball$xs - week_dist_ball$xe) +
+                              (week_dist_ball$ys - week_dist_ball$ye)*(week_dist_ball$ys - week_dist_ball$ye))
+
+week_dist_ball <- subset(week_dist_ball, offenseFormation != '')
+week_dist_ball <- subset(week_dist_ball, typeDropback != '')
+
+ggplot(data = week_dist_ball, aes(x = (playResult), y = dist)) +
+  geom_point(aes(color=(event)), alpha = 0.8, position = 'jitter') + 
+  labs(color="event", x="Набранное количество ярдов", y="Дистанция паса",title="Анализ паса 1")
+```
+
+```{r include = FALSE}
+pass_res <- week_dist_ball
+
+pass_res$pass_suc <- 0
+pass_res$pass_suc[pass_res$playResult > pass_res$yardsToGo] <- 1
+```
+
+На графике "Анализ паса 2" показана зависимость дистанция паса от расстояния до зоны тачдауна. Предполагалось что, чем дальше атакующая команда находится от зоны тачдауна, то дистанция паса увеличится, так как команде атаки нужно набирать больше очков и проходить больше ярдов. Оказалось, что это не так. Процентное соотношение успешности паса составляет 32%. Команде атаке нет смысла рисковать дальними пасами и лучше отдавать успешные передачи на малое расстояние.
+
+Количество успешных (1) и не успешных пасов (0)
+```{r}
+table(pass_res$pass_suc)
+```
+
+```{r}
+ggplot(data = pass_res, aes(x = (absoluteYardlineNumber), y = dist)) +
+  geom_point(aes(color=as.factor(pass_suc)), alpha = 1, position = 'jitter') + 
+  labs(color="Успешность паса", x="Ярдов до зоны touchdown", y="Дистанция паса", title="Анализ паса 2")
+```
+
+
