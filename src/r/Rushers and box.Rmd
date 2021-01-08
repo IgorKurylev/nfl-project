@@ -1,0 +1,111 @@
+---
+title: "Rushers and box"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(plyr)
+library(dplyr)
+```
+
+
+## Data load and cleaning
+```{r data load and cleaning, message=FALSE, warning=FALSE}
+plays_s <- read.csv('plays_split.csv', header = TRUE, sep=',')
+
+stat <- plays_s
+stat <- subset(stat, !is.na(defendersInTheBox))
+stat <- subset(stat, !is.na(numberOfPassRushers))
+stat <- subset(stat, offenseFormation != '')
+stat <- subset(stat, typeDropback != '')
+
+stat$counts <- 1
+stat$yardFromDefTouch <- 0
+stat$yardFromDefTouch <- stat$yardlineNumber
+stat$yardFromDefTouch[stat$possessionTeam == stat$yardlineSide] <- (100 - stat$yardlineNumber)
+
+stat$success <- 0
+stat$success[stat$playResult >= stat$yardsToGo] <- 1
+
+stat$yard_zone <- 1
+stat$yard_zone[stat$yardFromDefTouch<80] <- 2
+stat$yard_zone[stat$yardFromDefTouch<40] <- 3
+stat$yard_zone[stat$yardFromDefTouch<20] <- 4
+```
+
+## Preparing statistics
+```{r statistic, message=FALSE, warning=FALSE}
+groupColumns = c("offenseFormation","yard_zone", "defendersInTheBox", "numberOfPassRushers", "success")
+dataCol = c("counts")
+
+res <- ddply(stat, groupColumns, function(x) colSums(x[dataCol]))
+
+single_grp_form <- aggregate(res$counts, by=list(offenseFormation=res$offenseFormation), FUN=sum)
+
+single_grp_box <- aggregate(res$counts, by=list(defendersInTheBox=res$defendersInTheBox), FUN=sum)
+single_grp_rush <- aggregate(res$counts, by=list(numberOfPassRushers=res$numberOfPassRushers), FUN=sum)
+
+grouped_def <- aggregate(res$counts, by=list(defendersInTheBox=res$defendersInTheBox, numberOfPassRushers=res$numberOfPassRushers), FUN=sum)
+
+all_grp <- aggregate(res$counts, by=list(offenseFormation=res$offenseFormation, 
+                                         yard_zone=res$yard_zone, 
+                                         defendersInTheBox=res$defendersInTheBox, 
+                                         numberOfPassRushers=res$numberOfPassRushers), 
+                     FUN=sum)
+
+res <- res %>% rowwise %>% do({
+  result = as_data_frame(.)
+  result$countsOfFormation = single_grp_form[single_grp_form$offenseFormation == result$offenseFormation, 2]
+  result$countOfDefInBox = single_grp_box[single_grp_box$defendersInTheBox == result$defendersInTheBox,2]
+  result$countOfRushers = single_grp_rush[single_grp_rush$numberOfPassRushers == result$numberOfPassRushers,2]
+  
+  result$totalCountsOFAttack = grouped_def[grouped_def$defendersInTheBox == result$defendersInTheBox & 
+                                             grouped_def$numberOfPassRushers == result$numberOfPassRushers, 3]
+  
+  result$totalAll = all_grp[all_grp$offenseFormation == result$offenseFormation & 
+                              all_grp$yard_zone == result$yard_zone &
+                              all_grp$defendersInTheBox == result$defendersInTheBox & 
+                              all_grp$numberOfPassRushers == result$numberOfPassRushers, 5]
+  
+  result
+})
+
+res <- res %>%
+  rowwise %>%
+  do({
+    result = as_data_frame(.)
+    result$Percentage = round ( (result$counts/(result$totalAll))*100 , 2)
+    result
+  })
+res <- subset(res, totalCountsOFAttack >= 120)
+```
+
+## Predict
+```{r predict}
+question_ofeenseFormation <- 'EMPTY'
+question_yardLineNumber <- 54
+
+question_yard_zone <- 1
+question_yard_zone[stat$yardFromDefTouch<80] <- 2
+question_yard_zone[stat$yardFromDefTouch<40] <- 3
+question_yard_zone[stat$yardFromDefTouch<20] <- 4
+
+if (question_yardLineNumber >= 80){
+    question_yard_zone <- 1
+} else if (question_yardLineNumber < 80 && question_yardLineNumber > 40){
+    question_yard_zone <- 2
+} else if (question_yardLineNumber <= 40 && question_yardLineNumber > 20){
+    question_yard_zone <- 3
+}  else if (question_yardLineNumber <= 20){
+    question_yard_zone <- 4 }
+
+answer <- res[ which(res$offenseFormation==question_ofeenseFormation
+                         & res$yard_zone == question_yard_zone), ]
+
+answer <- answer[ which(answer$counts > 10), ]
+answer <- answer[order(answer$success,-answer$Percentage, -answer$counts),]
+answer <- answer[c(1,3,4,12)]
+head(answer[1:4] , 3)
+```
