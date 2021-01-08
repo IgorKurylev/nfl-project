@@ -1,0 +1,232 @@
+---
+title: "Plot Game and BMI Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+Для данного модуля необходимы внешние библиотеки
+Загружаем пакеты: `RPostgres`, `plotly`, `ggplot2`
+
+```{r, message=FALSE, echo=FALSE}
+if (!require('memisc'))
+{
+  install.packages('memisc', dependencies = TRUE)
+  library('memisc')
+}
+if (!require('eeptools'))
+{
+  install.packages('eeptools', dependencies = TRUE)
+  library('eeptools')
+}
+if (!require('RPostgres'))
+{
+  install.packages('RPostgres', dependencies = TRUE)
+  library('RPostgres')
+}
+if (!require('plotly'))
+{
+  install.packages('plotly', dependencies = TRUE)
+  library('plotly')
+}
+if (!require('ggplot2'))
+{
+  install.packages('ggplot2', dependencies = TRUE)
+  library('ggplot2')
+}
+```
+
+## Data
+
+Мы можем использовать базу данных (в данном модуле PostgreSQL) для выполнения операций выборки данных. Однако это не принципиально - некоторые строки используют обычные `csv` файлы
+
+Подключимся к базе данных, развернутой на `http://localhost`
+
+```{r}
+library(DBI)
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = 'datascience',
+                 host = 'localhost',
+                 port = 5432,
+                 user = 'postgres',
+                 password = 'fred')
+```
+
+Получим данные обо всех игровых моментах из таблицы *plays*
+
+```{r}
+plays_sql <- dbSendQuery(con, 'select * from plays')
+plays_df <- dbFetch(plays_sql)
+# plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
+head(plays_df)
+```
+
+Получим координаты всех игроков в игровые моменты первой недели, используя `week1.csv`
+
+```{r}
+df_week <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+head(df_week)
+```
+
+## Plotting
+
+Для отрисовки игрового момента используем функцию библиотеки `ggplot2`. Для этого мы берем gameId и playId - определяющие ключи для каждого игрового момента. На основе них получаем координаты во всех кадрах для игроков. Отсортировав покадровую расстановку игроков мы можем выполнить отрисовку каждой точки.
+
+```{r}
+plot_play_moment <- function(gameId, playId) {
+  slice_df <- df_week[df_week$gameId==gameId,]
+  slice_df <- slice_df[slice_df$playId == playId,]
+  slice_df <-slice_df[order(slice_df$frameId, slice_df$nflId),]
+  play_moment <- plays_df[plays_df$gameId==gameId & plays_df$playId == playId,]
+  
+  cat(play_moment$playDescription)
+  
+  plt <- ggplot(slice_df, aes(frame = frameId)) + 
+    annotate("rect", xmin = 0, xmax = 10, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+    annotate("rect", xmin = 110, xmax = 120, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
+    annotate("rect", xmin = 10, xmax = 110, ymin = 0, ymax = 53,fill='green', alpha=.2) + 
+    xlim(0, 120) + ylim(-10, 60) + 
+    geom_vline(xintercept = seq(0, 120, 10)) + 
+    geom_vline(xintercept = play_moment$absoluteYardlineNumber, colour='red') +
+    geom_hline(yintercept = seq(0, 53, 53)) + 
+    geom_point(mapping=aes(x, y,colour=team), size=3) + 
+    geom_text(mapping=aes(x, y, label = position), size=2.5) +
+    labs(x = "X",
+       y = "Y",
+       colour="Team") +
+    scale_color_manual(values=c("#6495ED", "#32CD32", "#F08080"))
+  
+  ggplotly(plt) %>%
+  layout(title = list(text = paste0(paste("NFL 2018 - ", gameId, play_moment$quarter, '-', play_moment$down),
+                                    '<br>',
+                                    '<sup>',
+                                    play_moment$playDescription,
+                                    '</sup>')), margin=margin(b=1))
+  }
+```
+
+
+
+Просматривая моменты, захотелось отыскать эти кадры в реальных трансляциях. Вот некотрые интересные моменты сопоставленные с видео на серверах YouTube
+
+- gameId=2018090600, playId=2474 - https://youtu.be/0fLqHxm90mM?t=286
+
+- gameId=2018092400, playId=539 - https://youtu.be/U046WMQ9Ie8?t=80
+
+- gameId=2018090600, playId=344 - https://youtu.be/0fLqHxm90mM?t=74
+
+```{r}
+plot_play_moment(2018090600, 344)
+```
+
+
+
+2018090600,2474 - https://youtu.be/0fLqHxm90mM?t=286
+
+```{r}
+plot_play_moment(2018090600,2474)
+```
+
+Такая отрисовка во многом проще для восприятия и позволяет нам лучше понять игровой момент. А покадровое перемещение игроков может прояснить некоторые спорные моменты. Такое представление удобно будет использовать для разрешения спорных ситуаций.
+
+## BMI-analisys
+
+BMI - это показатель массы человека (на русском звучит, как индекс массы тела). Это весьма простой параметр который неплохо может оценить весовое соотношение человека.
+
+Для начала получим данные об игроках
+
+```{r}
+# players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
+players_sql <- dbSendQuery(con, 'select * from players')
+players_df <- dbFetch(players_sql)
+players_df$birthDate <- as.Date(players_df$birthDate)
+head(players_df)
+```
+
+В среднем BMI можно разделить на несколько категорий:
+
+Недобор = <18.5
+Нормальный вес= 18.5–24.9 
+Сверх нормы = 25–29.9 
+Ожирение = 30 или больше
+
+Чтобы подсчитать индекс массы тела используем формулу для фунтов:
+
+$(weight / height^2) * 703$
+
+```{r}
+players_df$bmi <- (players_df$weight / (players_df$height)^2) * 703
+```
+
+Разобьем на три категории команд:
+
+- Атака
+- Защита
+- Специальные игроки
+
+Расшифровка игроков
+
+'CB', : CornerBack
+'SS', : Strong Safety
+'MLB', : Middle LineBacker
+'OLB', : Outer LineBacker
+'FS', : Free Safety
+'WR', : Wide Receiver
+'QB', : Quater Back
+'TE', : Tight End
+'RB', : Running Back
+'DE', : Defensive End
+'LB', : LineBacker
+'FB', : FullBack
+'ILB', : Inside LineBacker
+'DB', : Defensive Back
+'S', : Safety
+'HB', : HalfBack
+'NT', : Nose Tackle
+'P', : Punter
+'LS', : LongSnaper
+'K', : Kicker
+'DT' : Defense Tackle
+
+```{r}
+offence_df <- subset(players_df, (players_df$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
+special_team <- subset(players_df, (players_df$position %in% c('K', 'P', 'LS')))
+defence_df <- subset(players_df, !(players_df$position %in% c('K', 'P', 'LS', 'QB','WR','RB','FB', 'TE', 'NT', 'HB')))
+```
+
+### Команда защиты
+
+Мы видим, что основная часть команды защиты находится около группы с BMI выше нормы. Самые крупные игроки это DE и DT
+
+```{r}
+plt <- ggplot(data=defence_df, aes(as.factor(position), bmi)) +
+  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
+  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) +
+  geom_hline(yintercept = seq(25,30,5), colour='red')
+plot(plt + labs(title = 'BMI by position (Defence)', x = 'Position', y = 'BMI', color = 'Position'))
+```
+
+### Команда атаки
+
+Среди атакующих выделяются игроки NT. Остальные находятся на границе в 30 BMI. Самыми легкими оказались WR - они должны быть быстрыми и ловкими, чтобы суметь поймать мяч и пройти дальше за линию защиты.
+
+```{r}
+plt2 <- ggplot(data=offence_df, aes(as.factor(position), bmi)) +
+  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
+  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
+  geom_hline(yintercept = seq(25,30,5), colour='red')
+plot(plt2 + labs(title = 'BMI by position (Offence)', x = 'Position', y = 'BMI', color = 'Position'))
+```
+
+И наконец специальные игроки - это те, кто участвуют ударах по воротам или как LS занимается броском мяча квотербэку.
+
+Здесь видим, что снаппер (LS) самый тяжелый, а кикер и пунтер находятся даже в пределах нормы.
+
+```{r}
+plt3 <- ggplot(data=special_team, aes(as.factor(position), bmi)) +
+  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
+  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
+  geom_hline(yintercept = seq(25,30,5), colour='red')
+plot(plt3 + labs(title = 'BMI by position (Special team)', x = 'Position', y = 'BMI', color = 'Position'))
+```
+
+Таким образом получается что каждая категория игроков имеет схожие биологические параметры. А что более значимо, игроки которые стоят против друг друга (например, DT и NT) так же имеют сходные параметры. Это означает, что тренеры команд специально подбирают игроков в соответствии с формацией противника.
