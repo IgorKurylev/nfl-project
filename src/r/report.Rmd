@@ -1,0 +1,436 @@
+---
+title: "report"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Введение
+
+## Основы игры NFL
+
+Игра ведётся на прямоугольном поле 120 ярдов (110 метров) длиной и 53 1/3 ярдов (49 метров) шириной. У каждого конца поля, на расстоянии 100 ярдов друг от друга, проведены линии цели (goal lines). 10-ярдовая очковая зона (end zone) находится между линией цели и границей поля.
+
+Поперёк поля через каждые 5 ярдов нанесены линии. Каждые 10 ярдов пронумерованы от 10 до 50 от границ очковых зон к середине, обозначая таким образом количество ярдов, которые осталось пройти нападающей команде, чтобы заработать тачдаун.
+Каждая команда может выпускать на поле 11 игроков одновременно. Команды могут заменять всех или некоторых игроков между игровыми моментами. Обычно игроки специализируются на игре только в атаке, обороне или специальных командах (в моменты, когда мяч выбивают ногами). Каждую игру почти все 53 игрока команды НФЛ могут принимать участие в игре в той или иной роли.
+Игра состоит из игровых моментов. В начале каждого момента мяч кладётся туда (на ту же линию), где закончился предыдущий игровой момент.
+
+Команда, владеющая мячом, получает 4 попытки продвинуть мяч на 10 ярдов вперёд в сторону очковой зоны соперника. Каждая такая попытка называется дауном (англ. down). Если атакующая команда продвигается на 10 ярдов, она опять получает 4 попытки пройти следующие 10 ярдов. Если нападение не может пройти 10 ярдов за 4 попытки, мяч передаётся команде соперника, причём на той же самой линии, на которой завершилась 4-я попытка.
+
+За исключением начала игры и второй половины, а также розыгрышей после заработанных очков, мяч подаётся в игру броском назад между ног, называемым снепом (snap). В начале игрового момента обе команды выстраиваются напротив друг друга вдоль линии, на которой лежит мяч. Центральный игрок отдаёт мяч назад между ног игроку своей команды — квотербеку QB(как правило, главный игрок команды, лидер нападения).
+
+Игроки могут продвигать мяч двумя способами:
+
+- Бежать с мячом в руках, при этом можно отдавать мяч игрокам своей команды (однако, после пересечения бегущим с мячом игроком линии розыгрыша пас вперед запрещен).
+
+- Бросая мяч (пасуя). За игровой момент разрешено неограниченное количество пасов, но пас вперед может быть только один и из-за линии схватки.
+
+Игровой момент заканчивается, когда происходит одно из следующих событий:
+
+- Игрока с мячом свалили на землю (игра начинается с той линии, где его свалили);
+
+- Игрок с мячом выходит за границы поля или мяч коснулся земли за пределами поля (игра начинается на той линии, на которой игрок вышел за границу поля, но если он выбил мяч во время схватки за границу, то игра начинается с той же линии, просто команда нападения теряет одну попытку);
+
+- Не пойманный пас, брошенный вперёд мяч касается земли (игра начинается с той же линии, команда нападения теряет одну попытку. В случаях, когда мяч перехвачен игроком другой команды, другая команда становится нападающей, и в течение этой же самой схватки, без каких-либо остановок, игрок, поймавший мяч, пытается как можно ближе подбежать к очковой зоне противника);
+
+- Одна из команд зарабатывает очки.
+
+## Краткий обзор данных
+
+Представленные данные состоят из 4 таблиц:
+
+- *Game data* - информация о времени встречи команд на поле
+- *Player Data* - информация о игроках
+- *Play data* - описания игровых моментов
+- *Tracking data* - раскадровка игровых моментов с координатами игроков и мяча
+
+### Player Data
+
+В таблице ‘Player Data’ достаточно подробно расписаны игровые моменты. Из этих данных можно получить понимание использованной тактики атаки (‘offenseFormation', 'typeDropback', 'personnelO') и тактики защиты ('defendersInTheBox',' numberOfPassRushers', 'personnelD'). Показаны результаты игрового события('playResult'), результаты передачи паса ('passResult').
+
+### Tracking data
+
+В таблице ‘Tracking data’ для каждого игрового события из таблицы ‘Player Data’, представлены раскадровки этих событий, где каждый кадр — это треть секунды от реального времени в игре. Каждый кадр (‘frameId’) содержит информацию о координатах тринадцати игроков и мяча на поле. Если произошло какое-то игровое событие, например, передача
+ 
+паса или очко тачдауна, оно так же указывается для кадра.
+Из 22 игроков на поле, в таблице ‘Tracking data’ есть информация о 5-13 игроках. Были выбраны самые значимые игроки для конкретного игрового события. Игроки, которых в таблице нет, не повлияли на игровой момент.
+
+
+## Цели проекта
+
+В ходе работы были получены ответы на следующие вопросы:
+
+- Выявить лучшие схемы расположения игроков защиты против определенных тактик атаки
+
+- Определить лучших защитников, которые контролируют атакующих
+
+- Определить лучшие формирования защитников на перехваты пасов
+
+- Определить, как защита реагирует на различные тактики атаки
+
+- Какие факторы для конкретного отыгрыша наиболее влияют на полученные атакой очки
+
+- Выявить лучших защитников по критерию стабильности появления в отыгрышах
+
+- Выявить лучших защитников по биологическим параметрам
+
+# Обзорная часть
+
+## Регрессия
+
+В самом начале необходимо узнать, какие факторы влияют на полученные очки в таблице plays (чем меньше количество набранных очков *playResult* - тем лучше защита) для каждого отыгрыша. Для данной задачи были выбраны модели, использующие ансамблевые методы - Random forest, Bagging и бустинг, тк в таблице plays достаточно много категориальных факторов, а также из-за того, что ансамбли, в целом, дают более стабильный ответ и менее подвержены переобучению.
+
+### Random forest
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+library(party)
+
+# data preparation
+
+df <- read.csv("nfl-big-data-bowl-2021/plays.csv")
+df <- na.omit(df)
+
+df <- transform(df,
+                offenseFormation  = as.factor(offenseFormation),
+                typeDropback = as.factor(typeDropback),
+                passResult = as.factor(passResult))
+
+smp_size <- floor(0.8 * nrow(df))
+
+set.seed(731)
+train_ind <- sample(seq_len(nrow(df)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+```
+
+Построим модель. Для задачи регрессии принято выбирать параметр **mtry** (количество факторов, которые будут случайно выбираться на каждом этапе) равным p/3, где p - количество факторов, используемых в модели.
+
+```{r message=FALSE, warning=FALSE}
+model <- randomForest(playResult ~ yardsToGo + offenseFormation + defendersInTheBox + numberOfPassRushers + typeDropback + preSnapHomeScore + preSnapVisitorScore + passResult + epa,
+                      data = train, mtry = 3,
+                      importance = TRUE, ntrees = 500)
+
+model
+```
+
+Важность факторов в полученной модели:
+
+```{r message=FALSE, warning=FALSE}
+importance(model, type = 1)
+```
+
+```{r message=FALSE, warning=FALSE}
+varImpPlot(model, type = 1)
+```
+Видно, что количество полученных в отыгрыше очков в большей степени зависит от факторов *epa*, *yardToGo*, *passResult*
+
+Зависимость ошибки от количества деревьев в модели:
+
+```{r message=FALSE, warning=FALSE}
+plot(model, col = "red", lwd = 2)
+```
+
+Предсказания модели на тестовой выборке:
+
+```{r message=FALSE, warning=FALSE}
+predicted = predict(model, newdata = test)
+plot(predicted, test$playResult,
+     xlab = "Predicted", ylab = "Actual",
+     main = "Random forest: Predicted vs Actual",
+     col = "blue", pch = 20)
+grid()
+abline(0, 1, col = "red", lwd = 2)
+```
+
+Рассчитаем RMSE для Random forest:
+
+```{r message=FALSE, warning=FALSE}
+rf.rmse <- sqrt(mean((test$playResult - predicted) ^ 2))
+rf.rmse
+```
+
+### Bagging
+
+Bagging (bootstrap aggregation) - частный случай Random forest с **mtry** равным p.
+
+```{r message=FALSE, warning=FALSE}
+bagging_model <- randomForest(playResult ~ yardsToGo + offenseFormation + defendersInTheBox + numberOfPassRushers + typeDropback + preSnapHomeScore + preSnapVisitorScore + passResult + epa,
+                      data = train, mtry = 9,
+                      importance = TRUE, ntrees = 500)
+
+bagging_model
+```
+
+Важность факторов в полученной модели:
+
+```{r message=FALSE, warning=FALSE}
+importance(bagging_model, type = 1)
+```
+
+```{r message=FALSE, warning=FALSE}
+varImpPlot(bagging_model, type = 1)
+```
+
+В данной модели результат сильнее зависит от *epa* и *yardsToGo*, чем в прошлой
+
+Предсказания модели на тестовой выборке:
+
+```{r message=FALSE, warning=FALSE}
+predicted = predict(bagging_model, newdata = test)
+plot(predicted, test$playResult,
+     xlab = "Predicted", ylab = "Actual",
+     main = "Bagging: Predicted vs Actual",
+     col = "blue", pch = 20)
+grid()
+abline(0, 1, col = "red", lwd = 2)
+```
+
+RMSE для Bagging:
+
+```{r message=FALSE, warning=FALSE}
+bg.rmse <- sqrt(mean((test$playResult - predicted) ^ 2))
+bg.rmse
+```
+
+
+### Бустинг
+
+Построим модель:
+
+```{r message=FALSE, warning=FALSE}
+library(gbm)
+
+boosted_model <- gbm(playResult ~ yardsToGo + offenseFormation + defendersInTheBox + numberOfPassRushers + typeDropback + preSnapHomeScore + preSnapVisitorScore + passResult + epa,
+                     data = train, distribution = "gaussian", 
+                     n.trees = 5000, interaction.depth = 4, shrinkage = 0.01)
+```
+
+```{r message=FALSE, warning=FALSE}
+summary(boosted_model)
+```
+
+Для бустинга возможно построить т.н. графики, показывающие marginal effects для каждого фактора. Marginal effects - величина, на которую возрастет зависимая переменная при возрастании определенного фактора, тогда как остальные факторы остаются фиксированными.
+
+Marginal effects для *epa*, *yardsToGo*, *passResult*, *offenseFor*:
+
+Для *epa* видно, как быстро растут набранные очки при переходе через 0. Поэтому можно сказать, что этот переход становится неким переломным моментом для определенного события в игре, когда защита уже точно потеряет какое-то количество очков. 
+
+```{r message=FALSE, warning=FALSE}
+plot(boosted_model, i = "epa", ylab = "predicted value", lwd = 2)
+```
+
+Marginal effects для *yardsToGo* показывает, что при начале атаки на большом расстоянии от тачдауна, в случае ее успеха, принесет большое количество очков для атакующей команды. 
+
+```{r message=FALSE, warning=FALSE}
+plot(boosted_model, i = "yardsToGo", ylab = "predicted value", lwd = 2)
+```
+
+Для *passResult* видно, что наиболее выгодно для защиты перехватить мяч (Intercepted или Sack). Это принесет наименьшее количество очков атакующей команде.
+ 
+```{r message=FALSE, warning=FALSE}
+plot(boosted_model, i = "passResult", ylab = "predicted value", lwd = 2)
+```
+
+Также интересно количество предсказанных моделью очков для каждой расстановки атакующей команды:
+ 
+```{r message=FALSE, warning=FALSE}
+plot(boosted_model, i = "offenseFormation", ylab = "predicted value", lwd = 2)
+```
+
+Также, при фиксированном *epa*, расстановка атакующих практически не повлияет на исход отыгрыша, так как фактор *epa* более важен в данной модели:
+
+```{r message=FALSE, warning=FALSE}
+iters <- gbm.perf(boosted_model,method="OOB")
+plot.gbm(boosted_model, c(2, 9), iters)
+```
+
+
+Предсказания модели на тестовой выборке:
+
+```{r message=FALSE, warning=FALSE}
+boosted_prediction = predict(boosted_model, newdata = test, n.trees = 5000)
+
+plot(boosted_prediction, test$playResult,
+     xlab = "Predicted", ylab = "Actual", 
+     main = "Predicted vs Actual: Boosted Model, Test Data",
+     col = "blue", pch = 20)
+grid()
+abline(0, 1, col = "red", lwd = 2)
+```
+RMSE:
+
+```{r message=FALSE, warning=FALSE}
+boosted.rmse <- sqrt(mean((test$playResult - boosted_prediction) ^ 2))
+boosted.rmse
+```
+
+Сравнение RMSE для каждой модели:
+
+```{r message=FALSE, warning=FALSE}
+data.frame(random_forest = rf.rmse, bagging = bg.rmse, boosted = boosted.rmse)
+```
+
+### Выводы из регрессии
+
+Из анализа полученных моделей можно сделать вывод о значимости для отыгрыша таких факторов, как *epa*, *yardsToGo*, *passResult*. В дальнейшем это используется, например, в кластеризации. По графикам marginal effects можно судить о влиянии на отыгрыш отдельно взятого фактора независимо от других. Например, фактор *epa* сильнее всего влияет на результат при переходе через нулевое значение, также можно сделать предположение об исходе отыгрыша по marginal effects для расстановки атакующей команды (*offenseFormation*), что полезно для оценки рисков и построении стратегии защиты.
+
+## Кластеризация
+
+Перед тем, как проводить кластеризацию, было замечено, что в таблице plays в поле playDescription в скобках отмечается защитник, который отличился в данном отыгрыше. Поэтому для каждого из этих имен были посчитаны очки, который этот защитник принес или отнял у атакующей команды (или так или иначе повлиял на это), а также количества появлений каждого защитника в отыгрышах. 
+
+Выведем количество принесенных защитником очков атакующей команде и количество появлений защитника в отыгрышах:
+
+```{r message=FALSE, warning=FALSE}
+library(plotly)
+
+df <- read.csv("players_merged.csv")
+df <- na.omit(df)
+
+plot(df$cnt, df$points, xlab = "Number of events", ylab = "Collected points")
+```
+
+Нас интересуют игроки, стабильно приносящие минимальное количество очков атакующей команде. Поэтому в идеале должно быть наибольшее Number of event при наименьшем Collected points.
+
+Избавление от аномалий и масштабирование признаков (так как для алгоритмов кластеризации важно работать с нормализованными данными):
+
+```{r message=FALSE, warning=FALSE}
+df <- subset(df, df$cnt < 100)
+df <- subset(df,  df$cnt != 59 & df$points != 19)
+
+library(caret)
+
+## Feature scaling
+preproc <- preProcess(df[,c(8,9)], method=c("center", "scale"))
+norm <- predict(preproc, df[,c(8,9)])
+
+plot(norm$cnt, norm$points, xlab = "Number of events", ylab = "Collected points")
+
+scaled <- data.frame(norm$cnt, norm$points)
+```
+
+Для данного набора признаков использовалась иерархическая кластеризация (метод Уорда)
+Было выбрано разбиение на 8 классов:
+
+```{r message=FALSE, warning=FALSE}
+d <- dist(as.matrix(scaled))
+hc <- hclust(d, method = "ward.D")
+plot(hc, xlab='State')
+
+rect.hclust(hc , k = 8)
+```
+
+Таким образом - интересующие нас кластеры - 2,6,7 (фиолетовый, светло-зеленый и салатовый),
+Так как это игроки, наиболее стабильно приносящие минимальное количество очков атакующей команде.
+
+```{r message=FALSE, warning=FALSE}
+options(ggplot2.continuous.colour="viridis")
+options(ggplot2.continuous.fill = "viridis")
+
+ct <- cutree(hc, k = 8)
+
+fig <- plot_ly(data = df, x = ~cnt, y = ~points, text = ~ct)
+add_markers(fig, color = ~ct)
+```
+
+Далее для каждого игрока было посчитано BMI - отношение веса тела к высоте и построен график зависимости принесенных очков от BMI.
+
+```{r message=FALSE, warning=FALSE}
+df["BMI"] <- (df$weight / (df$height)^2) * 703
+
+plot(df$BMI, df$points, xlab = "BMI", ylab = "Collected points")
+```
+
+Избавление от аномалий и масштабирование признаков:
+
+```{r message=FALSE, warning=FALSE}
+df <- subset(df, df$points != 447 & df$BMI != 35.9936)
+df <- subset(df, df$points != 241 & df$BMI != 39.97166)
+
+## Feature scaling
+
+preproc <- preProcess(df[,c(8,10)], method=c("center", "scale"))
+norm <- predict(preproc, df[,c(8,10)])
+
+plot(norm$BMI, norm$points, xlab = "BMI", ylab = "Collected points")
+
+scaled <- data.frame(norm$BMI, norm$points)
+scaled <- na.omit(scaled)
+```
+
+Для данного набора признаков использовался k-means (было выбрано 8 классов):
+
+```{r message=FALSE, warning=FALSE}
+set.seed(731)
+
+wss <- numeric(15) 
+for (i in 1:15) wss[i] <- (kmeans(scaled, centers=i)$tot.withinss)
+
+plot(1:15, wss, type="b", 
+     xlab="Number of Clusters",ylab="Within groups sum of squares",
+     main = "WSS")
+chosen <- 8
+abline(v = chosen, h = wss[chosen], col = 'red')
+```
+
+В данном разбиении нас интересуют кластеры 7,6,5,3 (салатовый, светло-зеленый, зеленый и синий)
+Так как это разные типы игроков и интересно по каждому биологическому типу игроков определить наиболее полезных защитников.
+
+```{r message=FALSE, warning=FALSE}
+km <- kmeans(scaled, 8, nstart = 15)
+
+fig <- plot_ly(data = df, x = ~BMI, y = ~points, text = ~km$cluster)
+add_markers(fig, color = ~km$cluster)
+```
+
+Для следующего разбиения анализировалась таблица plays с отыгрышами. Для нее произведена попытка разбить на группы события по epa и yardsToGo (расстоянию до тачдауна). EPA в данном случае можно интерпретировать как оценку риска (чем выше epa - тем больше очков может потерять команда защитников, но также, в случае успешной защиты, при высоком epa можно отнять много очков у команды атаки)
+
+
+```{r message=FALSE, warning=FALSE}
+df <- read.csv("nfl-big-data-bowl-2021/plays.csv")
+
+library(ggplot2)
+
+p <- ggplot(df, aes(yardsToGo, playResult))
+p + geom_point(position = "jitter", alpha = 0.1)
+```
+
+Избавление от аномалий и масштабирование признаков:
+
+```{r message=FALSE, warning=FALSE}
+preproc <- preProcess(df[,c(which(colnames(df)=="yardsToGo"),which(colnames(df)=="epa"))], method=c("center", "scale"))
+norm <- predict(preproc, df[,c(which(colnames(df)=="yardsToGo"),which(colnames(df)=="epa"))])
+
+scaled <- data.frame(norm$yardsToGo, norm$epa)
+```
+
+В данном случае снова использовался k-means и было выбрано разбиение на 8 кластеров:
+
+```{r message=FALSE, warning=FALSE}
+set.seed(731)
+
+wss <- numeric(15) 
+for (i in 1:15) wss[i] <- (kmeans(scaled, centers=i)$tot.withinss)
+
+plot(1:15, wss, type="b", 
+     xlab="Number of Clusters",ylab="Within groups sum of squares",
+     main = "WSS")
+chosen <- 8
+abline(v = chosen, h = wss[chosen], col = 'red')
+```
+
+```{r message=FALSE, warning=FALSE}
+km <- kmeans(scaled, 8, nstart = 20)
+
+fig <- plot_ly(data = df, x = ~yardsToGo, y = ~epa, color = ~km$cluster, text = ~km$cluster)
+fig
+```
+
+В данном случае наиболее полезными можно назвать кластеры 2,3 (фиолетовый и синий - два самых верхних) как наиболее рискованные для защиты, тк они близки к тачдауну
+
+Крайний правый кластер можно считать наименее рискованным из-за дальности к тачдауну, поэтому в этих событиях легче сыграть в защиту, но и количество очков, которые защита отбирает у атаки, не такое большое
+
+Самый нижний кластер можно считать самым успешным для защиты, так как в этих отыгрышах epa самое низкое
+
+
