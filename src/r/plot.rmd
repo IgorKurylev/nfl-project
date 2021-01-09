@@ -99,14 +99,24 @@ add_missing <- function(df, cur_max) {
 formation_make <- function(type=0, formation) {
   bestper <- read.csv("bestper.csv")
   bestpossDef <- read.csv("bestpossDef.csv")
+  bestpossDef <- bestpossDef[bestpossDef$density != 0,]
   bestpossA <- read.csv("bestpossA.csv")
   bestpossA <- bestpossA[bestpossA$density != 0,]
   if(type == 0){
     current <- bestper[bestper$offenseFormation == formation,]
     all_pos <- bestpossDef[bestpossDef$Atype == formation,]
     dl_pos <- all_pos[all_pos$type == 'DL',]
+    if(nrow(dl_pos) == 0){
+      dl_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'DL',]
+    }
     lb_pos <- all_pos[all_pos$type == 'LB',]
+    if(nrow(lb_pos) == 0){
+      lb_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'LB',]
+    }
     db_pos <- all_pos[all_pos$type == 'DB',]
+    if(nrow(db_pos) == 0){
+      db_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'DB',]
+    }
     
     dl_pos <- add_missing(dl_pos, current$DL_def)
     lb_pos <- add_missing(lb_pos, current$LB_def)
@@ -115,30 +125,34 @@ formation_make <- function(type=0, formation) {
     field_df <- rbind(dl_pos, lb_pos, db_pos)
   } else {
     field_df <- bestpossA[bestpossA$Atype == formation,]
+    if(nrow(field_df) > 10){
+      field_df <- field_df[1:10,]
+    }
   }
   return(field_df)
 }
-```
-
-
-
-```{r}
-def_df <- formation_make(type=0, formation = 'SHOTGUN')
-off_df <- formation_make(type=1, formation = 'SHOTGUN')
 ```
 
 ## Использование
 
 В качестве положений мяча будут координаты (75, 35), (100, 43), (34, 30)
 
-```{r}
-plot_scene(off_df, def_df, 75, 35, "Моделирование игры NFL")
+```{r, warning=FALSE}
+l <- htmltools::tagList()
+i = 1
+for (form in c("ALL", "I_FORM", "JUMBO", "PISTOL", "SHOTGUN", "SINGLEBACK", "WILDCAT")) {
+  def_df <- formation_make(type=0, formation = form)
+  off_df <- formation_make(type=1, formation = form)
+  l[[i]] <- as.widget(plot_scene(off_df, def_df, runif(1,5,105), runif(1, 10, 43), paste("Моделирование игры NFL -", form)))
+  i = i+1
+}
+l
 ```
 
-```{r}
-plot_scene(off_df, def_df, 100, 43, "Моделирование игры NFL")
-```
+</p><a href="#">Следующая страница<a>
 
-```{r}
-plot_scene(off_df, def_df, 34, 30, "Моделирование игры NFL")
-```
+<p></p>
+
+<a href="Distance Analysis 2.html">Предыдущая страница<a>
+
+<p></p><p>
