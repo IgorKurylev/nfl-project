@@ -158,7 +158,7 @@ formation_make <- function(type=0, formation) {
 ```{r, warning=FALSE}
 l <- htmltools::tagList()
 i = 1
-for (form in c("ALL", "I_FORM", "JUMBO", "PISTOL", "SHOTGUN", "SINGLEBACK", "WILDCAT")) {
+for (form in c("ALL", "EMPTY", "I_FORM", "JUMBO", "PISTOL", "SHOTGUN", "SINGLEBACK", "WILDCAT")) {
   def_df <- formation_make(type=0, formation = form)
   off_df <- formation_make(type=1, formation = form)
   l[[i]] <- as.widget(plot_scene(off_df, def_df, runif(1,5,105), runif(1, 10, 43), paste("Моделирование игры NFL -", form)))
