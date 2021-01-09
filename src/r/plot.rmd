@@ -74,13 +74,57 @@ plot_scene <- function(offense_df, defense_df, ball_x, ball_y, title) {
 
 ## Загрузка данных
 
+Для моделирования положения игроков на поле используются данные
+
 ```{r}
-off_df <- read.csv('positions_off.csv')
-off_df <- off_df[off_df$density > 0,]
-off_df <- subset(off_df, select = x:Atype)
-def_df <- read.csv('positions_def.csv')
-def_df <- def_df[def_df$density > 0,]
-def_df <- subset(def_df, select = x:Atype)
+add_missing <- function(df, cur_max) {
+  if(nrow(df) < cur_max){
+      diff = cur_max - nrow(df)
+      for (i in 1:diff) {
+        dx = runif(1,0,1)
+        dy = runif(1,-5,5)
+        new <- list(x=df[i,]$x + dx, y=df[i,]$y + dy, density=df[i,]$density, type=df[i,]$type, Atype=df[i,]$Atype)
+        df <- rbind(df, new)
+      }
+  } else {
+    df <- df[1:cur_max,]
+  }
+  return(df)
+}
+```
+
+Функция создания набора позиций по формации
+
+```{r}
+formation_make <- function(type=0, formation) {
+  bestper <- read.csv("bestper.csv")
+  bestpossDef <- read.csv("bestpossDef.csv")
+  bestpossA <- read.csv("bestpossA.csv")
+  bestpossA <- bestpossA[bestpossA$density != 0,]
+  if(type == 0){
+    current <- bestper[bestper$offenseFormation == formation,]
+    all_pos <- bestpossDef[bestpossDef$Atype == formation,]
+    dl_pos <- all_pos[all_pos$type == 'DL',]
+    lb_pos <- all_pos[all_pos$type == 'LB',]
+    db_pos <- all_pos[all_pos$type == 'DB',]
+    
+    dl_pos <- add_missing(dl_pos, current$DL_def)
+    lb_pos <- add_missing(lb_pos, current$LB_def)
+    db_pos <- add_missing(db_pos, current$DB_def)
+    
+    field_df <- rbind(dl_pos, lb_pos, db_pos)
+  } else {
+    field_df <- bestpossA[bestpossA$Atype == formation,]
+  }
+  return(field_df)
+}
+```
+
+
+
+```{r}
+def_df <- formation_make(type=0, formation = 'SHOTGUN')
+off_df <- formation_make(type=1, formation = 'SHOTGUN')
 ```
 
 ## Использование
