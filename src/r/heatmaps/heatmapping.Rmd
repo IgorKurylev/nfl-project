@@ -1,7 +1,5 @@
 ---
-title: "heatmapping"
-author: "yurkovkirill"
-date: "09 01 2021"
+title: "Heatmapping"
 output:
   #rmarkdown::github_document: default
   html_document
@@ -12,7 +10,7 @@ output:
   В этом модуле мы исследуем данные и определим лучшие расположения игроков защиты в игровой момент в зависимости от роли, типа атаки противника, ярдлинии. Определим лучшую компановку команды защиты от типа атаки противника. Также определим лучшее расположение для команды атаки.
 
 ### Setup
-```{r setup, results = "hide"}
+```{r setup, message = FALSE, warning = FALSE}
 library(DBI)
 library(ggplot2)
 library(dplyr)
@@ -217,9 +215,8 @@ DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w
 plots <- relGraphs(DefPlayers_inSnap, "DefPlayers_inSnapBest", "DefPlayers_inSnapWinScr","DefPlayers_inSnapBestWin")
 plots[[3]]
 
-# У нас получилось учесть всех защитников для обоих команд
 ```
-
+У нас получилось учесть всех защитников для обоих команд
 
 ### Функция выборки ключевых точек
   Данная функция выявляет ключенвые точки по плотности. Похожий функционал использует geom_density2d, но получить оттуда информацию можно лишь посмотрев на результат отрисовки. Для автоматической работы это неприемлемо. Поэтому и была написана эта функция. Результат ее использования мы увидим позже в виде полученных наборов точек и пересечений на хитмапах.
@@ -347,7 +344,7 @@ yardsHeat <- printYardsGraph(85, 100)
 
 ```
 
-### Лучшее расположение защиты по ролям защитников защитников
+### Лучшее расположение защиты по ролям защитников
   Ниже представлены функции, которые отображают heatmap, ключевые точки, возвращает ключевые точки в виде dataframe для роли защитника в общем случае. Предусмотрен случай малого количество данных о хорошем отыгрыше, ведь не все тактики и роли популярны. Предусмотрен тихий режим работы функции (silent = 1), при котором не отображается heatmap.
   На вход фунции подается только тип роли игрока, возвращается dataframe с ключевыми точками.
 ```{r data10, warning = FALSE}
@@ -404,13 +401,14 @@ playerTypeGraphDraw <- function(strType, k1 = 75, k2 = 90, ck = 5, silent = 0){
     }
     
   }
+  print(rel_max)
   return(rel_max)
 }
 ```
 
 #### Пример использования
 ```{r data11, warning = FALSE, message = FALSE}
-strType <- "DB"
+strType <- "DL"
 playerTypeGraphDraw(strType)
 ```
 
@@ -571,8 +569,7 @@ playerTypeTacticsGraphDrawAttack <- function(strType, strAType, k1 = 75, k2 = 90
      }
      densPlot <- densPlot + geom_point(data = rel_max, mapping = aes(x,y), color = "red", size = 5)
      
-     print(densPlot + #geom_vline(xintercept = rel_max$x) + geom_hline(yintercept = rel_max$y) +
-             labs(subtitle = paste0("x_rel_best = ", rel_max$x, " y_rel_best = ", rel_max$y)))
+     print(densPlot)
    }
  } else {
    if(nrowsdf == 1){
@@ -592,8 +589,8 @@ playerTypeTacticsGraphDrawAttack <- function(strType, strAType, k1 = 75, k2 = 90
 #### Пример использования
 ```{r data146, warning = FALSE}
 strAType <- "SHOTGUN"
-strType <- "TE"
-playerTypeTacticsGraphDrawAttack(strType, strAType)
+strType <- "WR"
+bestpossA <-playerTypeTacticsGraphDrawAttack(strType, strAType)
 ```
 
 ##### Можно автоматически
@@ -630,8 +627,7 @@ write.csv(Idata, "IAttack.csv")
 
 ### Лучшие наборы ролей для защиты
   Для определения лучшей тактики защиты недостаточно выявления расположения по ролям игроков. Важно определить лучшую компановку для команды защиты.
-```{r pesonnel}
-############################### personel ###################################!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+```{r pesonnel, message=FALSE, warning=FALSE}
 library(plyr)
 library(dplyr)
 def_stat <- read.csv('data/plays_split.csv', header = TRUE, sep=',')
@@ -713,23 +709,29 @@ bestposs <- data.frame(x=double(),
                     y=double(),
                     density=double(),
                     type=character(),
-                    Atype=character()) 
+                    Atype=character())
+bestpos <- playerTypeGraphDraw("LB", k1 = 60)
+bestpos$Atype <- "ALL"
+bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeGraphDraw("DB")
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "SHOTGUN")
+bestpos <- playerTypeGraphDraw("DL")
+bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "SINGLEBACK")
+bestpos <- playerTypeTacticsGraphDraw("DL", "SINGLEBACK", k1 = 55, ck = 2)
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "I_FORM")
+bestpos <- playerTypeTacticsGraphDraw("DL", "I_FORM")
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "PISTOL")
+bestpos <- playerTypeTacticsGraphDraw("DL", "PISTOL")
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "EMPTY")
+bestpos <- playerTypeTacticsGraphDraw("DL", "SHOTGUN")
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "JUMBO")
+bestpos <- playerTypeTacticsGraphDraw("DL", "JUMBO")
 bestposs <- rbind(bestposs, bestpos)
-bestpos <- playerTypeTacticsGraphDraw("DB", "WILDCAT", ck = 3)
+bestpos <- playerTypeTacticsGraphDraw("DL", "WILDCAT")
+bestposs <- rbind(bestposs, bestpos)
+bestpos <- playerTypeTacticsGraphDraw("DL", "EMPTY", k1 = 50, ck = 3)
 bestposs <- rbind(bestposs, bestpos)
 write.csv(bestposs, "bestpossDef.csv", row.names = FALSE)
 
@@ -738,11 +740,25 @@ dbDisconnect(con)
 
 ```
  Были получены необходимые данные с помощью которых будет произведена отрисовка. 
- 
- 
+
+
+</p><a href="plot.html">Следующая страница<a>
+
+<p></p>
+
+<a href="Result.html">Предыдущая страница<a>
+
+<p></p>
+
+
+
+
+
+
+
 #### P.S.
   Ниже указаны разработанные, но неиспользованные функции
-```{r PS, include = FALSE}
+```{r PS, eval = FALSE}
 ######################################################## NOT USED BUT READY TO USE #######################################
 if(FALSE){
   extractMultiMaxDensityXYrelCONT <- function(dataframe){
@@ -830,10 +846,4 @@ playerTypeGraphDrawAttack <- function(strType, k1 = 75, k2 = 90, ck = 5){
 
 
 ```
-</p><a href="plot.html">Следующая страница<a>
 
-<p></p>
-
-<a href="Result.html">Предыдущая страница<a>
-
-<p></p><p>
