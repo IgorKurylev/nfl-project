@@ -35,6 +35,26 @@ output:
 
 - Одна из команд зарабатывает очки.
 
+Роли игроков защиты разделены на категории:
+
+- Defensive line (DL) включает в себя:
+
+-- Defensive tackle (DT)
+
+-- Defensive end (DE)
+
+- Linebackers (LB)
+
+-- Middle linebacker (MLB)
+
+-- Outside linebacker (OLB)
+
+- Defensive backs (DB)
+
+-- Cornerback (CB)
+
+-- Safety (S)
+
 ## Краткий обзор данных
 
 Представленные данные состоят из 4 таблиц:
@@ -427,10 +447,84 @@ fig <- plot_ly(data = df, x = ~yardsToGo, y = ~epa, color = ~km$cluster, text = 
 fig
 ```
 
-В данном случае наиболее полезными можно назвать кластеры 2,3 (фиолетовый и синий - два самых верхних) как наиболее рискованные для защиты, тк они близки к тачдауну
+В данном случае наиболее полезными можно назвать кластеры 2,3 (фиолетовый и синий - два самых верхних) как наиболее рискованные для защиты, тк они близки к зоне тачдауна
 
-Крайний правый кластер можно считать наименее рискованным из-за дальности к тачдауну, поэтому в этих событиях легче сыграть в защиту, но и количество очков, которые защита отбирает у атаки, не такое большое
+Крайний правый кластер (темно-фиолетовый) можно считать наименее рискованным из-за дальности к зоне тачдауна, поэтому в этих событиях легче сыграть в защиту, но и количество очков, которые защита отбирает у атаки, не такое большое
 
-Самый нижний кластер можно считать самым успешным для защиты, так как в этих отыгрышах epa самое низкое
+Самый нижний кластер (зеленый) можно считать самым успешным для защиты, так как в этих отыгрышах epa самое низкое
+
+### Выводы из кластеризации
+
+Первая кластеризация (зависимость очков от количества появлений в отыгрышах) дает представление о наиболее стабильных защитниках за все отыгрыши.
+
+Во время анализа второй кластеризации возникла гипотеза, что каждой роли игрока соответствует свое значение BMI (так подбирают игроков в команду на определенную роль - один из признаков). Попробуем посмотреть, каким ролям игроков в команде соответствуют полученные группы по первым двум кластеризациям:  
+
+Подготовка данных с разбиением на полученные ранее группы:
+
+```{r message=FALSE, warning=FALSE}
+library(plyr)
+library(dplyr)
+
+clust <- read.csv('clustering.csv', header = TRUE, sep=',') 
+clust$counts <- 1
+
+groupColumns = c("nflId ","position", "points_bmi", "points_cnt")
+dataCol = c("counts")
+
+res <- ddply(clust, groupColumns, function(x) colSums(x[dataCol]))
+single_bmi <- aggregate(res$counts, by=list(points_bmi=res$points_bmi), FUN=sum)
+single_cnt <- aggregate(res$counts, by=list(points_cnt=res$points_cnt), FUN=sum)
+pos_bmi <- aggregate(res$counts, by=list(position=res$position, points_bmi=res$points_bmi), FUN=sum)
+pos_cnt <- aggregate(res$counts, by=list(position=res$position, points_cnt=res$points_cnt), FUN=sum)
+all_grp <- aggregate(res$counts, by=list(nflId=res$nflId, 
+                                         position=res$position, 
+                                         points_bmi=res$points_bmi, 
+                                         points_cnt=res$points_cnt), 
+                     FUN=sum)
+```
+
+Посчитаем количество пересечений каждого кластера с позицией игрока "bmi_count_pos" для кластеризации по BMI и количество пересечений позиции игрока для кластеризаци по количеству появлений игрока в отыгрышах "cnt_count_pos". Также для каждого кластера было посчитано общее количество игроков в нем "bmi_count", "cnt_count":
+
+```{r message=FALSE, warning=FALSE}
+res <- res %>% rowwise %>% do({
+        result = as_data_frame(.)
+        
+        result$bmi_count = single_bmi[single_bmi$points_bmi == result$points_bmi, 2]
+        result$cnt_count = single_cnt[single_cnt$points_cnt == result$points_cnt, 2]
+        result$count_bmi_pos = pos_bmi[pos_bmi$points_bmi   == result$points_bmi & 
+                                               pos_bmi$position   == result$position, 3]
+        result$count_bmi_pos = pos_cnt[pos_cnt$points_cnt   == result$points_cnt & 
+                                               pos_cnt$position   == result$position, 3]
+        
+        
+        result$totalAll = all_grp[  all_grp$points_bmi == result$points_bmi & 
+                                            all_grp$points_cnt == result$points_cnt &
+                                            all_grp$position   == result$position & 
+                                            all_grp$nflId      == result$nflId, 5]
+        
+        result
+})
+res
+```
+
+В итоге видно, что каждому из кластеров 7,6,5,3 в большинстве соответствует одна или две позиции игрока. Это дает возможность назвать лучших защитников по ролям (кластеру 7 соответствует corner back, кластеру 6 - OLB, MLB, ILB - подкатегории LB, кластеру 5 - DE, OLB, кластеру 3 - DT)
+
+```{r message=FALSE, warning=FALSE}
+xtabs(~position + points_bmi , data = res)
+```
+
+По итогам первой кластеризации наиболее стабильными защпитниками оказываются роли CB (кластеры 2,6), DE и OLB (кластер 7). Причем роли DE и OLB приносят очки защите стабильнее, чем CB (кластер 7 находится правее кластеров 2 и 6)
+
+```{r message=FALSE, warning=FALSE}
+xtabs(~position + points_cnt , data = res)
+```
+
+<a href="Defenders.html">Следующая страница<a>
+
+<p></p>
+
+<a href="#">Предыдущая страница<a>
+
+<p></p>
 
 
