@@ -1172,38 +1172,6 @@ dbDisconnect(con)</code></pre>
 <p>Ниже указаны разработанные, но неиспользованные функции</p>
 <pre class="r"><code>######################################################## NOT USED BUT READY TO USE #######################################
 if(FALSE){
-  extractMultiMaxDensityXYrelCONT &lt;- function(dataframe){
-    rel_max &lt;- data.frame(x=double(),
-                          y=double(),
-                          density=double()) 
-    
-    dataframe &lt;- dfBest
-    kde &lt;- kde2d(dataframe$x_rel, dataframe$y_rel, n = 100)
-    #contour(kde, xlab = &quot;x_rel&quot;, ylab = &quot;y_rel&quot; )
-    r &lt;- raster(kde)
-    dfKde &lt;- as.data.frame(r, xy=T) #layer == density
-    xyD &lt;- aggregate(dfKde$layer, by = list(dfKde$x, dfKde$y), FUN = max)
-    names(xyD)[names(xyD) == &quot;x&quot;] &lt;- &quot;density&quot;
-    names(xyD)[names(xyD) == &quot;Group.1&quot;] &lt;- &quot;x&quot;
-    names(xyD)[names(xyD) == &quot;Group.2&quot;] &lt;- &quot;y&quot;
-    
-    #dens90 &lt;- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 90/100 ###Pending
-    dens90 &lt;- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 80/100 ###Pending
-    xyDmax &lt;- xyD[xyD$density &gt; dens90,]
-    cnt &lt;- getContourLines(xyDmax$x, xyDmax$y, xyDmax$density, nlevels = 2)# bin = 2)
-    
-    difGID &lt;- unique(cnt$GID)
-    
-    for (i in 1:(length(difGID))) {
-      tCnt &lt;- cnt[cnt$GID==difGID[i],]
-      rel_max &lt;- rbind(rel_max, data.frame(x = summary(tCnt$x)[[3]], y = summary(tCnt$y)[[3]], density = 1))
-    }
-    #rel_max &lt;- xyD[xyD$density == max(xyD$density),]
-    return(rel_max)
-  }
-}
-
-
 printPlayerTypeGraphAttack &lt;- function(strType){
   i_def_pos &lt;- dbGetQuery(con, paste0(&quot;SELECT fS.epa, (w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS

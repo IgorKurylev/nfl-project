@@ -761,38 +761,6 @@ dbDisconnect(con)
 ```{r PS, eval = FALSE}
 ######################################################## NOT USED BUT READY TO USE #######################################
 if(FALSE){
-  extractMultiMaxDensityXYrelCONT <- function(dataframe){
-    rel_max <- data.frame(x=double(),
-                          y=double(),
-                          density=double()) 
-    
-    dataframe <- dfBest
-    kde <- kde2d(dataframe$x_rel, dataframe$y_rel, n = 100)
-    #contour(kde, xlab = "x_rel", ylab = "y_rel" )
-    r <- raster(kde)
-    dfKde <- as.data.frame(r, xy=T) #layer == density
-    xyD <- aggregate(dfKde$layer, by = list(dfKde$x, dfKde$y), FUN = max)
-    names(xyD)[names(xyD) == "x"] <- "density"
-    names(xyD)[names(xyD) == "Group.1"] <- "x"
-    names(xyD)[names(xyD) == "Group.2"] <- "y"
-    
-    #dens90 <- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 90/100 ###Pending
-    dens90 <- min(xyD$density) + (max(xyD$density) - min(xyD$density)) * 80/100 ###Pending
-    xyDmax <- xyD[xyD$density > dens90,]
-    cnt <- getContourLines(xyDmax$x, xyDmax$y, xyDmax$density, nlevels = 2)# bin = 2)
-    
-    difGID <- unique(cnt$GID)
-    
-    for (i in 1:(length(difGID))) {
-      tCnt <- cnt[cnt$GID==difGID[i],]
-      rel_max <- rbind(rel_max, data.frame(x = summary(tCnt$x)[[3]], y = summary(tCnt$y)[[3]], density = 1))
-    }
-    #rel_max <- xyD[xyD$density == max(xyD$density),]
-    return(rel_max)
-  }
-}
-
-
 printPlayerTypeGraphAttack <- function(strType){
   i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, (w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
