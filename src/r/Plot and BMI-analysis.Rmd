@@ -138,8 +138,9 @@ BMI - это показатель массы человека (на русско
 
 ```{r}
 # players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
+players_df <- as.data.frame(read.csv('clustering.csv'))
 players_sql <- dbSendQuery(con, 'select * from players')
-players_df <- dbFetch(players_sql)
+players_df2 <- dbFetch(players_sql)
 players_df$birthDate <- as.Date(players_df$birthDate)
 head(players_df)
 ```
@@ -155,8 +156,10 @@ head(players_df)
 
 $(weight / height^2) * 703$
 
+Так как теперь он посчитан в первой части отчета, то это вычисление бессмыслено. Повторим для команды атаки.
+
 ```{r}
-players_df$bmi <- (players_df$weight / (players_df$height)^2) * 703
+players_df2$BMI <- (players_df2$weight / (players_df2$height)^2) * 703
 ```
 
 Разобьем на три категории команд:
@@ -190,8 +193,7 @@ players_df$bmi <- (players_df$weight / (players_df$height)^2) * 703
 'DT' : Defense Tackle
 
 ```{r}
-offence_df <- subset(players_df, (players_df$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
-special_team <- subset(players_df, (players_df$position %in% c('K', 'P', 'LS')))
+offence_df <- subset(players_df2, (players_df2$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
 defence_df <- subset(players_df, !(players_df$position %in% c('K', 'P', 'LS', 'QB','WR','RB','FB', 'TE', 'NT', 'HB')))
 ```
 
@@ -200,43 +202,84 @@ defence_df <- subset(players_df, !(players_df$position %in% c('K', 'P', 'LS', 'Q
 Мы видим, что основная часть команды защиты находится около группы с BMI выше нормы. Самые крупные игроки это DE и DT
 
 ```{r}
-plt <- ggplot(data=defence_df, aes(as.factor(position), bmi)) +
+plt <- ggplot(data=defence_df, aes(as.factor(position), BMI)) +
   geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
   geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) +
   geom_hline(yintercept = seq(25,30,5), colour='red')
 plot(plt + labs(title = 'BMI by position (Defence)', x = 'Position', y = 'BMI', color = 'Position'))
 ```
 
+Для защитников оценим их разделение по трем большим категориям: Defensive Line, Defensive Backs и Linebackers:
+Для этого вернемся к описанию ролей представленному нами в начале отчета:
+
+Defensive line (DL) включает в себя:
+
+– Defensive tackle (DT)
+
+– Defensive end (DE)
+
+Linebackers (LB):
+
+– Middle linebacker (MLB)
+
+– Outside linebacker (OLB)
+
+Defensive backs (DB):
+
+– Cornerback (CB)
+
+– Safety (S)
+
+Всего в наших данных представленны такие роли защитников: CB DB DE DT FS ILB LB MLB OLB S SS
+
+Таким образом получаем такие категории:
+
+- Defensive line: DT DE
+
+- Linebackers: ILB LB MLB OLB
+
+- Defensive backs: CB DB S SS FS
+
+Используя полученные категории разделим защитников на категории:
+
+```{r}
+defence_df['category'] <- ifelse(defence_df$position %in% c('DT', 'DE'),
+                                 'DL',
+                                 ifelse(defence_df$position %in% c('ILB', 'LB', 'MLB', 'OLB'),
+                                        'LB',
+                                        'DB')
+                                 )
+```
+
+Повторим построение points by BMI используя полученные категории игроков.
+
+```{r}
+plt <- ggplot(data=defence_df, aes(BMI, points)) +
+  geom_point(aes(color=factor(category))) +
+  geom_hline(yintercept = 0, colour='red')
+ggplotly(plt + labs(title = 'Points by BMI (Defence)', x = 'BMI', y = 'Points', color = 'Category'))
+```
+
+Мы видим, что данные соответствуют разделению по кластеризации, сделанному в первой части отчета. Самые эффективные защитники - DL. Они приносят больше всего очков команде защиты. Однако, как мы видим по данным, их в разы меньше игроков DB и LB. Это так же может влиять на распределение.
+
 ### Команда атаки
 
 Среди атакующих выделяются игроки NT. Остальные находятся на границе в 30 BMI. Самыми легкими оказались WR - они должны быть быстрыми и ловкими, чтобы суметь поймать мяч и пройти дальше за линию защиты.
 
 ```{r}
-plt2 <- ggplot(data=offence_df, aes(as.factor(position), bmi)) +
+plt2 <- ggplot(data=offence_df, aes(as.factor(position), BMI)) +
   geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
   geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
   geom_hline(yintercept = seq(25,30,5), colour='red')
 plot(plt2 + labs(title = 'BMI by position (Offence)', x = 'Position', y = 'BMI', color = 'Position'))
 ```
 
-И наконец специальные игроки - это те, кто участвуют ударах по воротам или как LS занимается броском мяча квотербэку.
-
-Здесь видим, что снаппер (LS) самый тяжелый, а кикер и пунтер находятся даже в пределах нормы.
-
-```{r}
-plt3 <- ggplot(data=special_team, aes(as.factor(position), bmi)) +
-  geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
-  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
-  geom_hline(yintercept = seq(25,30,5), colour='red')
-plot(plt3 + labs(title = 'BMI by position (Special team)', x = 'Position', y = 'BMI', color = 'Position'))
-```
-
 Таким образом получается что каждая категория игроков имеет схожие биологические параметры. А что более значимо, игроки которые стоят против друг друга (например, DT и NT) так же имеют сходные параметры. Это означает, что тренеры команд специально подбирают игроков в соответствии с формацией противника.
 
-</p><a href="Distance-Analysis.html">Следующая страница<a>
+</p><a href="Distance-Analysis.html">Следующая страница</a>
 
 <p></p>
 
-<a href="plot.html">Предыдущая страница<a>
+<a href="plot.html">Предыдущая страница</a>
 
 <p></p><p>
