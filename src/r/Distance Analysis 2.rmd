@@ -44,7 +44,33 @@ ggplotly(p)
 
 Точки, скопившиеся в районе average=0, это значения, для которых еще не были подсчитаны средние расстояния. Однако, для них мы имеем значения points и можем их учитывать. Добавление этим строкам значений average только усилит зависимость points и average.
 
-Построим функцию плотности для average
+Построим функцию плотности для average. Для этого выделим категории в позициях игроков, аналогично части про BMI.
+
+```{r}
+defence_df <- pl_df
+defence_df['category'] <- ifelse(pl_df$position %in% c('DT', 'DE'),
+                                 'DL',
+                                 ifelse(pl_df$position %in% c('ILB', 'LB', 'MLB', 'OLB'),
+                                        'LB',
+                                        'DB')
+                                 )
+```
+
+```{r}
+defence_df <- defence_df[defence_df$enter > 0.0,]
+
+p2 <- ggplot(defence_df, aes(as.factor(category), average)) +
+  geom_point(mapping=aes(colour=as.factor(position)), position='jitter', alpha=0.5) +
+  geom_boxplot(mapping=aes(group=as.factor(category)), alpha=0.5, outlier.size = -Inf) +
+  ggtitle("Average distance") +
+  xlab("Role") +
+  ylab("Distance") +
+  labs(colour="Category")
+
+ggplotly(p2)
+```
+
+Из данного графика мы видим, что игроки DL чаще остальных стараются держать короткое расстояние до противника, это обусловлено их позицией на расстановках - эти игроки первые пересекают линию скримиджа. LB держат более стабильную дистанцию - их задача пробиться к QB. И наконец DB имеют больший разброс по расстояниям так как к ним относятся еще игроки Safety, которые обычно стоят позади. Если разбирать по подкатегориям то сразу видно, что среди DB игроки, которые держат наименьшую дистанцию - CB, те, кто закрывают ресиверов - их задача держать WR близко к себе.
 
 ```{r}
 d1 <- density(pl_df$average)
@@ -61,10 +87,10 @@ plot(d2, main="Density for minimum distance", xlab="Value", ylab="Density")
 
 Таким образом на основе графиков плотности мы видим, что наибольшая эффективность защиты достигается при тактике короткой дистанции.
 
-</p><a href="#">Следующая страница<a>
+</p><a href="#">Следующая страница</a>
 
 <p></p>
 
-<a href="Distance-Analysis.html">Предыдущая страница<a>
+<a href="Distance-Analysis.html">Предыдущая страница</a>
 
 <p></p><p>
