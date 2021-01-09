@@ -63,7 +63,9 @@ head(plays_df)
 Получим координаты всех игроков в игровые моменты первой недели, используя `week1.csv`
 
 ```{r}
-df_week <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+week_sql <- dbSendQuery(con, 'select * from week1')
+df_week <- dbFetch(week_sql)
+# df_week <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
 head(df_week)
 ```
 
@@ -230,3 +232,11 @@ plot(plt3 + labs(title = 'BMI by position (Special team)', x = 'Position', y = '
 ```
 
 Таким образом получается что каждая категория игроков имеет схожие биологические параметры. А что более значимо, игроки которые стоят против друг друга (например, DT и NT) так же имеют сходные параметры. Это означает, что тренеры команд специально подбирают игроков в соответствии с формацией противника.
+
+</p><a href="Distance-Analysis.html">Следующая страница<a>
+
+<p></p>
+
+<a href="plot.html">Предыдущая страница<a>
+
+<p></p><p>
