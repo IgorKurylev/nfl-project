@@ -1,6 +1,8 @@
 ---
 title: "Plotting Scene"
-output: html_document
+output: 
+  html_document: 
+    keep_md: yes
 ---
 
 В этом модуле мы будем использовать библиотеку ggplot2 и plotly для создания интерактивной карты расстановки игроков на поле.
@@ -62,7 +64,7 @@ plot_scene <- function(offense_df, defense_df, ball_x, ball_y, title) {
     geom_vline(xintercept=ball_x, colour='red') +
     geom_hline(yintercept=seq(0, 53, 53)) + 
     geom_point(mapping=aes(x+ball_x, y+ball_y, colour=role), size=3) + 
-    geom_text(mapping=aes(x+ball_x, y+ball_y, label=type), size=2.5) +
+    geom_text(mapping=aes(x+ball_x, y+ball_y, label=as.factor(type)), size=2.5) +
     ggtitle(title) +
     xlab("X") +
     ylab("Y") +
@@ -82,6 +84,7 @@ plot_scene <- function(offense_df, defense_df, ball_x, ball_y, title) {
 add_missing <- function(df, cur_max) {
   if(nrow(df) < cur_max){
       diff = cur_max - nrow(df)
+      df <-df[order(df$density),]
       for (i in 1:diff) {
         dx = runif(1,0,1)
         dy = runif(1,-5,5)
@@ -116,24 +119,23 @@ add_missing <- function(df, cur_max) {
 ```{r}
 formation_make <- function(type=0, formation) {
   bestper <- read.csv("bestper.csv")
-  bestpossDef <- read.csv("bestpossDef.csv")
+  bestpossDef <- read.csv("bestPosDef.csv")
   bestpossDef <- bestpossDef[bestpossDef$density != 0,]
-  bestpossA <- read.csv("bestpossA.csv")
-  bestpossA <- bestpossA[bestpossA$density != 0,]
+  bestpossA <- read.csv("bestpossAtck.csv")
   if(type == 0){
     current <- bestper[bestper$offenseFormation == formation,]
     all_pos <- bestpossDef[bestpossDef$Atype == formation,]
     dl_pos <- all_pos[all_pos$type == 'DL',]
     if(nrow(dl_pos) == 0){
-      dl_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'DL',]
+      dl_pos <- bestpossDef[bestpossDef$Atype == 'ALL' & bestpossDef$type == 'DL',]
     }
     lb_pos <- all_pos[all_pos$type == 'LB',]
     if(nrow(lb_pos) == 0){
-      lb_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'LB',]
+      lb_pos <- bestpossDef[bestpossDef$Atype == 'ALL' & bestpossDef$type == 'LB',]
     }
     db_pos <- all_pos[all_pos$type == 'DB',]
     if(nrow(db_pos) == 0){
-      db_pos <- bestpossDef[bestpossDef$Atype == 'ALL' && bestpossDef$type == 'DB',]
+      db_pos <- bestpossDef[bestpossDef$Atype == 'ALL' & bestpossDef$type == 'DB',]
     }
     
     dl_pos <- add_missing(dl_pos, current$DL_def)
@@ -143,6 +145,11 @@ formation_make <- function(type=0, formation) {
     field_df <- rbind(dl_pos, lb_pos, db_pos)
   } else {
     field_df <- bestpossA[bestpossA$Atype == formation,]
+    for (i in 1:nrow(field_df)){
+      if (field_df[i,]$density == 0){
+         field_df[i,] <- bestpossA[bestpossA$Atype == 'ALL' & bestpossA$type == field_df[i,]$type,]
+      }
+    }
     if(nrow(field_df) > 10){
       field_df <- field_df[1:10,]
     }
@@ -153,7 +160,7 @@ formation_make <- function(type=0, formation) {
 
 ## Использование
 
-В качестве положений мяча будут координаты (75, 35), (100, 43), (34, 30)
+Положение мяча генерируется с использованием функции равномерного распределния `runif()`
 
 ```{r, warning=FALSE}
 l <- htmltools::tagList()
@@ -161,7 +168,7 @@ i = 1
 for (form in c("ALL", "EMPTY", "I_FORM", "JUMBO", "PISTOL", "SHOTGUN", "SINGLEBACK", "WILDCAT")) {
   def_df <- formation_make(type=0, formation = form)
   off_df <- formation_make(type=1, formation = form)
-  l[[i]] <- as.widget(plot_scene(off_df, def_df, runif(1,5,105), runif(1, 10, 43), paste("Моделирование игры NFL -", form)))
+  l[[i]] <- as.widget(plot_scene(off_df, def_df, runif(1,20,80), runif(1, 20, 33), paste("Моделирование игры NFL -", form)))
   i = i+1
 }
 l
