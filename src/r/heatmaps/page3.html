@@ -1202,7 +1202,7 @@ dbDisconnect(con)</code></pre>
 <h4>P.S.</h4>
 <p>Ниже указаны разработанные, но не использованные в демонстрации функции</p>
 <pre class="r"><code>######################################################## NOT USED BUT READY TO USE #######################################
-if(FALSE){
+
 printPlayerTypeGraphAttack &lt;- function(strType){
   i_def_pos &lt;- dbGetQuery(con, paste0(&quot;SELECT fS.epa, (w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                       w.gameId, w.team, fS.success, w.position FROM football_inSnap1 as fS
@@ -1252,7 +1252,124 @@ playerTypeGraphDrawAttack &lt;- function(strType, k1 = 60, spy = 5, spx = spy){
   }
   return(rel_max)
 }
-}</code></pre>
+
+# Функция нахождения игры по позициям
+getRealMoment <- function(poss, dc = 0.1, dc2 = 0.1){
+  maxPercent <- 0
+  if (!nrow(poss)){
+    print("EMPTY INPUT")
+    return(FALSE)
+  }
+  cdefZero = 0
+  for (m in 1:nrow(poss)){
+    pos <- poss[m,]
+    print(pos)
+    if (pos$Atype == "ALL"){
+      i_def_pos <- dbGetQuery(con, paste0("SELECT * FROM allWeeks as w JOIN football_inSnap1 as fS ON
+                                          fS.gameId = w.gameId AND fS.playId = w.playId
+                                          WHERE abs(w.x - x_b) BETWEEN ",pos$x-dc," AND ",pos$x+dc,"
+                                          AND (w.y - y_b) BETWEEN ",pos$y-dc," AND ",pos$y+dc,"
+                                          AND w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')"))
+    } else {
+      i_def_pos <- dbGetQuery(con, paste0("SELECT * FROM allWeeks as w JOIN football_inSnap1 as fS ON
+                                          fS.gameId = w.gameId AND fS.playId = w.playId
+                                          WHERE abs(w.x - x_b) BETWEEN ",pos$x-dc," AND ",pos$x+dc,"
+                                          AND (w.y - y_b) BETWEEN ",pos$y-dc," AND ",pos$y+dc,"
+                                          AND w.event = 'ball_snap' AND w.team NOT IN(fS.possessionTeam, 'football')
+                                          AND offenseFormation == '", pos$Atype,"'"))
+    }
+    i_def_pos <- i_def_pos[,-c(25,26)]#delete doubled playId 
+    print(nrow(i_def_pos))
+    if (!nrow(i_def_pos)){
+      cdefZero = cdefZero + 1
+      next
+    }
+    for (i in 1:nrow(i_def_pos)){
+      print(paste0("for row number ", i, " from ", nrow(i_def_pos)))
+      mmt_pos <- i_def_pos[i,]
+      
+      mmt_all <- dbGetQuery(con, paste0("SELECT * FROM allWeeks as w WHERE
+                                          frameId = '", mmt_pos$frameId , "' AND team = '", mmt_pos$team , "'
+                                          AND gameId ='", mmt_pos$gameId, "' AND playId ='", mmt_pos$playId, "'"))
+      #mmt_pos$x_b
+      #mmt_pos$y_b
+      mmt_all$x <- abs(mmt_all$x - mmt_pos$x_b) 
+      mmt_all$y <- mmt_all$y - mmt_pos$y_b
+      mmt_all <- mmt_all[c(2,3,10,11,13,16,17)]# only interesting
+      mmt_pos <- mmt_pos[c(2,3,10,11,13,16,17)]
+      if (!length(unique(mmt_all$position))){
+        next
+      }
+      pos_limit <- list()
+      pos_got <- list()
+      for(np in 1:length(unique(mmt_all$position))){
+        p <- unique(mmt_all$position)[np]
+        pos_limit[p] <- nrow(mmt_all[mmt_all$position == p,])
+        pos_got[p] <- 0
+      }
+      
+      if (is.null(pos_limit[[pos$type]])){
+        pos_limit[[pos$type]] <- 1
+        pos_got[[pos$type]] <- 1
+      } else {
+        pos_got[[pos$type]] <- pos_got[[pos$type]] + 1
+        pos_limit[[pos$type]] <- pos_limit[[pos$type]] + 1
+      }
+
+      if (!nrow(mmt_all)){
+        next
+      }
+      for (j in 1:nrow(mmt_all)){
+        j_pos <- mmt_all[j,]
+        best_possRole <- poss[poss$type == j_pos$position,]
+        for(k in 1:nrow(best_possRole)){
+          if(between(j_pos$x, best_possRole$x[k] - dc2, best_possRole$x[k] + dc2)){
+            if(between(j_pos$y, best_possRole$y[k] - dc2, best_possRole$y[k] + dc2)){
+              pos_got[[j_pos$position]] <- pos_got[[j_pos$position]] + 1
+              break;
+            }
+          }
+        }
+      }
+      
+      percent <- Reduce("+",pos_got)/Reduce("+",pos_limit)*100
+      if (maxPercent < percent){
+        maxPercent <- percent
+        moment <- mmt_all
+        moment <- rbind(moment, mmt_pos)
+      } 
+
+      if (!length(pos_limit)){
+        next
+      }
+      for(pl in 1:length(pos_limit)){
+        if (pos_limit[[pl]] <= pos_got[[pl]]){
+          flag = flag + 1
+        }
+      }
+      if(flag == length(pos_limit)){
+        break;
+      }
+      flag <- 0
+    }
+    
+    if (flag == 3){
+      break;
+    }
+  }
+  
+  if(nrow(poss) > cdefZero){
+    print(moment)
+    return(moment)
+  }
+  return(FALSE)
+}
+
+momentSH <- head(getRealMoment(bestposs),1)
+bestDefmoment <- dbGetQuery(con, paste0("SELECT * FROM plays WHERE playId == ", momentSH$playId, " AND gameId == ", momentSH$gameId))
+write.csv(bestDefmoment, "bestDefmoment.csv")
+
+</code></pre>
 </div>
 </div>
 </div>
