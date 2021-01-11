@@ -39,21 +39,21 @@ output:
 
 - Defensive line (DL) включает в себя:
 
--- Defensive tackle (DT)
+ + Defensive tackle (DT)
 
--- Defensive end (DE)
+ + Defensive end (DE)
 
 - Linebackers (LB)
 
--- Middle linebacker (MLB)
+ + Middle linebacker (MLB)
 
--- Outside linebacker (OLB)
+ + Outside linebacker (OLB)
 
 - Defensive backs (DB)
 
--- Cornerback (CB)
+ + Cornerback (CB)
 
--- Safety (S)
+ + Safety (S)
 
 ## Краткий обзор данных
 
@@ -68,11 +68,19 @@ output:
 
 В таблице ‘Player Data’ достаточно подробно расписаны игровые моменты. Из этих данных можно получить понимание использованной тактики атаки (‘offenseFormation', 'typeDropback', 'personnelO') и тактики защиты ('defendersInTheBox',' numberOfPassRushers', 'personnelD'). Показаны результаты игрового события('playResult'), результаты передачи паса ('passResult').
 
+Важно сказать про метрику EPA в американском футболе:
+Expected Points Added - это метрика, цель который измерить ценность отдельных ситуаций в количестве очков.
+
+EPA вычисляется разницей между EP (ожидаемых очков) относительно прошлого отыгрыша, при вычислении которых учитывается номер отыгрыша (down), расстояния, позиции игроков на поле,
+количество очков в данный момент времени и другие характеристики.
+
+То есть EPA показывает насколько благоприятная ситуация в данный момент времени для игроков атаки.
+Чем ниже EPA тем для атаки хуже, а для защиты лучше.
+
 ### Tracking data
 
-В таблице ‘Tracking data’ для каждого игрового события из таблицы ‘Player Data’, представлены раскадровки этих событий, где каждый кадр — это треть секунды от реального времени в игре. Каждый кадр (‘frameId’) содержит информацию о координатах тринадцати игроков и мяча на поле. Если произошло какое-то игровое событие, например, передача
- 
-паса или очко тачдауна, оно так же указывается для кадра.
+В таблице ‘Tracking data’ для каждого игрового события из таблицы ‘Player Data’, представлены раскадровки этих событий, где каждый кадр — это треть секунды от реального времени в игре. Каждый кадр (‘frameId’) содержит информацию о координатах тринадцати игроков и мяча на поле. Если произошло какое-то игровое событие, например, передача паса или очко тачдауна, оно так же указывается для кадра.
+
 Из 22 игроков на поле, в таблице ‘Tracking data’ есть информация о 5-13 игроках. Были выбраны самые значимые игроки для конкретного игрового события. Игроки, которых в таблице нет, не повлияли на игровой момент.
 
 
@@ -144,6 +152,7 @@ importance(model, type = 1)
 ```{r message=FALSE, warning=FALSE}
 varImpPlot(model, type = 1)
 ```
+
 Видно, что количество полученных в отыгрыше очков в большей степени зависит от факторов *epa*, *yardToGo*, *passResult*
 
 Зависимость ошибки от количества деревьев в модели:
@@ -173,7 +182,7 @@ rf.rmse
 
 ### Bagging
 
-Bagging (bootstrap aggregation) - частный случай Random forest с **mtry** равным p.
+Bagging (bootstrap aggregating) - частный случай Random forest с **mtry** равным p.
 
 ```{r message=FALSE, warning=FALSE}
 bagging_model <- randomForest(playResult ~ yardsToGo + offenseFormation + defendersInTheBox + numberOfPassRushers + typeDropback + preSnapHomeScore + preSnapVisitorScore + passResult + epa,
@@ -412,7 +421,7 @@ df <- read.csv("nfl-big-data-bowl-2021/plays.csv")
 
 library(ggplot2)
 
-p <- ggplot(df, aes(yardsToGo, playResult))
+p <- ggplot(df, aes(yardsToGo, epa))
 p + geom_point(position = "jitter", alpha = 0.1)
 ```
 
@@ -497,7 +506,7 @@ res <- res %>% rowwise %>% do({
                                                pos_cnt$position   == result$position, 3]
         
         
-        result$totalAll = all_grp[  all_grp$points_bmi == result$points_bmi & 
+        result$totalAll = all_grp[all_grp$points_bmi == result$points_bmi & 
                                             all_grp$points_cnt == result$points_cnt &
                                             all_grp$position   == result$position & 
                                             all_grp$nflId      == result$nflId, 5]
@@ -519,7 +528,7 @@ xtabs(~position + points_bmi , data = res)
 xtabs(~position + points_cnt , data = res)
 ```
 
-<a href="Defenders.html">Следующая страница<a>
+<a href="page2.html">Следующая страница<a>
 
 <p></p>
 
