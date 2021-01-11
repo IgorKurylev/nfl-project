@@ -1,5 +1,5 @@
 ---
-title: "Heatmapping"
+title: "page3"
 output:
   html_document:
     keep_md: yes
@@ -10,7 +10,8 @@ output:
   В этом модуле мы исследуем данные и определим лучшие расположения игроков защиты в игровой момент в зависимости от роли, типа атаки противника, ярдлинии. Определим лучшую компановку команды защиты от типа атаки противника. Также определим лучшее расположение для команды атаки.
 
 ### Setup
-```{r setup, message = FALSE, warning = FALSE}
+
+```r
 library(DBI)
 library(ggplot2)
 library(dplyr)
@@ -24,7 +25,8 @@ knitr::opts_knit$set(root.dir = "D:/MyFilesDesktop/Student/7SEM/DataScience/DS_P
 
 ## Подготовка данных
 #### Заполнение общими данными
-```{r data, results = "hide"}
+
+```r
 con <- dbConnect(RSQLite::SQLite(), ":memory:")
 dbWriteTable(con, "games", read.csv("data/games.csv"))
 dbWriteTable(con, "allWeeks", read.csv("data/week1.csv"))
@@ -44,12 +46,12 @@ dbAppendTable(con, "allWeeks", read.csv("data/week14.csv"))
 dbAppendTable(con, "allWeeks", read.csv("data/week15.csv"))
 dbAppendTable(con, "allWeeks", read.csv("data/week16.csv"))
 dbAppendTable(con, "allWeeks", read.csv("data/week17.csv"))
-
 ```
 
 #### Таблица plays
   Чистых данных для нашего исследования недостаточно. Требуется добавить дополнительные колонки, например yardFromDefTouch отражает расстояние от линии тачдауна защищающихся, этой характеристики в данных нет, но она отражает напряженность игрового момента, чем это значение ниже, тем выше цена ошибки защиты.
-```{r plays data, results = "hide"}
+
+```r
 # Add additional column for statistic:
 # - success
 # - yardFromDefTouch
@@ -65,24 +67,70 @@ dbExecute(con, "UPDATE plays SET yardFromDefTouch = CASE
 ```
 
   Просмотрим наши данные. 
-```{r testdata}
+
+```r
 dbListTables(con)
+```
+
+```
+## [1] "allWeeks" "games"    "plays"
+```
+
+```r
 dbGetQuery(con, "SELECT COUNT(*) FROM allWeeks")
+```
+
+```
+##   COUNT(*)
+## 1 18309388
+```
+
+```r
 testTeam <- head(dbGetQuery(con, "SELECT DISTINCT w.nflId, w.team FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
                                       AND p.playId = w.playId WHERE w.gameId = 2018090600
                                       ORDER BY w.nflId"),10)#60)
 testTeam
+```
 
+```
+##      nflId     team
+## 1       NA football
+## 2      310     away
+## 3    79848     home
+## 4  2495454     away
+## 5  2495613     home
+## 6  2506467     home
+## 7  2507763     home
+## 8  2507828     away
+## 9  2532842     home
+## 10 2533040     away
+```
+
+```r
 testFrames <- head(dbGetQuery(con, "SELECT w.frameId, w.playId, COUNT(w.nflId), COUNT(w.displayName) FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
                                       AND p.playId = w.playId WHERE w.gameId = 2018090600
                                       GROUP BY w.frameId, w.playId ORDER BY w.playId"),10)#60
 testFrames
+```
 
+```
+##    frameId playId COUNT(w.nflId) COUNT(w.displayName)
+## 1        1     75             13                   14
+## 2        2     75             13                   14
+## 3        3     75             13                   14
+## 4        4     75             13                   14
+## 5        5     75             13                   14
+## 6        6     75             13                   14
+## 7        7     75             13                   14
+## 8        8     75             13                   14
+## 9        9     75             13                   14
+## 10      10     75             13                   14
 ```
   testFrames запрос показал, что количество игроков каждом фрейме одного момента одинаковое, поэтому смело можно брать ball_snap кадр и мы получим данные о всех зафиксированных игроках в моменте
 
   testTeam запрос дал нам понять, что команда у игрока во время игры не меняется, но мы знаем что меняется сторона. В чистых данных колонка в plays содержит трехбуквенные значения команд, что не позволяет нормально работать с allWeeks, где колонка команды содержит значения 'home' и 'away'. В games есть информация о принимающей (home) команде в виде трехбуквенного значения. Отредактируем наши данные для удобного использования.
-```{r data3, results = "hide"}
+
+```r
 dbExecute(con, "UPDATE plays as p SET possessionTeam = 'away'
                 WHERE possessionTeam != (SELECT homeTeamAbbr FROM games as g WHERE p.gameId = g.gameId)")
 dbExecute(con, "UPDATE plays as p SET possessionTeam = 'home'
@@ -96,19 +144,36 @@ dbExecute(con, "UPDATE allWeeks SET position = CASE
 ```
 
 #### Проверим наши данные
-```{r data4}
+
+```r
 testTeam1 <- dbGetQuery(con, "SELECT team, COUNT(DISTINCT(playId)) FROM allWeeks as w GROUP BY team")
 testTeam1
+```
 
+```
+##       team COUNT(DISTINCT(playId))
+## 1     away                    4591
+## 2 football                    4592
+## 3     home                    4592
+```
+
+```r
 testTeamPlay <- dbGetQuery(con, "SELECT possessionTeam, COUNT(DISTINCT(playId)) FROM plays GROUP BY possessionTeam")
 testTeamPlay
+```
+
+```
+##   possessionTeam COUNT(DISTINCT(playId))
+## 1           away                    3973
+## 2           home                    3992
 ```
   Мы привели их к удобному для исследования виду
 
 ### New ball snap table
   После анализа данных понятно, что расположение игроков на поле очень разнообразно и систематизировать знания об их позициях можно, выявив их координаты относительно положения сбрасывающего во время начала схватки. Этим положением является положение мяча, ведь информации о сбрасывающем игроке в данных нет. А моментом времени является момент ball_snap.
 Сделаем вспомогательную таблицу.
-```{r data5, results = "hide"}
+
+```r
 dbWriteTable(con, "football_inSnap1", dbGetQuery(con, "SELECT p.epa, w.x as x_b, w.y as y_b, w.displayName, w.event, w.playId,
                                       w.gameId, p.offenseFormation, p.possessionTeam, p.yardFromDefTouch, p.success
                                       FROM plays as p JOIN allWeeks as w ON p.gameId = w.gameId
@@ -119,7 +184,8 @@ dbWriteTable(con, "football_inSnap1", dbGetQuery(con, "SELECT p.epa, w.x as x_b,
 ## Базовые функции
 ### Функции построения базовых heatmaps и базовой выборки
   Функции выявляют лучшее расположение по EPA и успеху, как по самым значимым параметрам, выявленным при построении моделей. На вход нужно падать только dataframe и строки для названия heatmaps, которые она вернет вместе с лучшими данными.
-```{r data6}
+
+```r
 # Для защиты
 relGraphs <- function(df, strDF, strBestWin){
   summary(df)
@@ -191,12 +257,12 @@ relGraphsAttack <- function(df, strBest, strWin, strBestWin){
 # EXAMPLE: plots <- relGraphsAttack(WR_def_pos, "WR_def_posBest", "WR_def_posWin","WR_def_posBestWin")
 # plots
 # or plots[[1]]
-
 ```
 
 #### Проверим работу функции
   Построим heatmap лучшего расположение защиты в независимости от факторов
-```{r data7}
+
+```r
 # пробуем соединить по команде (home / away)
 # Красота
 DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
@@ -206,8 +272,9 @@ DefPlayers_inSnap <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w
 
 plots <- relGraphs(DefPlayers_inSnap, "DefPlayers_inSnap","DefPlayers_inSnapBestWin")
 plots[[3]]
-
 ```
+
+![](heatmapping_files/figure-html/data7-1.png)<!-- -->
 
 У нас получилось учесть всех защитников для обоих команд
 
@@ -215,7 +282,8 @@ plots[[3]]
   Данная функция выявляет ключевые точки по плотности. Похожий функционал использует geom_density2d, но получить оттуда информацию можно лишь посмотрев на результат отрисовки. Для автоматической работы это неприемлемо. Поэтому и была написана эта функция. Результат ее использования мы увидим позже в виде полученных наборов точек и пересечений на хитмапах. Из-за сильной зашумленности данных здесь используется сглаживание.
   
   Функция получает на вход dataframe с x y, возвращает dataframe с ключевыми точками. Также можно настроить параметры отбора, в k1 следует подавать число от 0 до 100, которое обозначает уровень в процентах, ниже которого не будет происходить отбор пиковых значений, spy и spx указывают на число соседних значений с двух сторон, выше которых должно быть пиковое значение, чтобы считаться пиком.
-```{r data777}
+
+```r
 extractMultiMaxDensityXYrelULTRA <- function(dataframe, k1 = 60, spy = 5, spx = spy){
     rel_max <- data.frame(x=double(),
                           y=double(),
@@ -277,7 +345,8 @@ extractMultiMaxDensityXYrelULTRA <- function(dataframe, k1 = 60, spy = 5, spx = 
 ### Использование
 
 #### Общие heatmaps лучшего расположения против всех типов атак по их популярности
-```{r data8}
+
+```r
 ### разные типы атак
 # SINGLEBACK
 def_ag_SINGLEBACK <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
@@ -286,8 +355,11 @@ def_ag_SINGLEBACK <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w
                                   AND fS.offenseFormation = 'SINGLEBACK'")
 plots <- relGraphs(def_ag_SINGLEBACK, "def_ag_SINGLEBACK", "def_ag_SINGLEBACK_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-1.png)<!-- -->
 
+```r
 # SHOTGUN
 def_ag_SHOTGUN <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -295,7 +367,11 @@ def_ag_SHOTGUN <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y 
                                   AND fS.offenseFormation = 'SHOTGUN'")
 plots <- relGraphs(def_ag_SHOTGUN, "def_ag_SHOTGUN", "def_ag_SHOTGUN_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-2.png)<!-- -->
+
+```r
 # PISTOL
 def_ag_PISTOL <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -303,7 +379,11 @@ def_ag_PISTOL <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y -
                                   AND fS.offenseFormation = 'PISTOL'")
 plots <- relGraphs(def_ag_PISTOL, "def_ag_PISTOL", "def_ag_PISTOL_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-3.png)<!-- -->
+
+```r
 # I_FORM
 def_ag_I_FORM <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success  FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -311,7 +391,11 @@ def_ag_I_FORM <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y -
                                   AND fS.offenseFormation = 'I_FORM'")
 plots <- relGraphs(def_ag_I_FORM, "def_ag_I_FORM", "def_ag_I_FORM_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-4.png)<!-- -->
+
+```r
 # WILDCAT 
 def_ag_WILDCAT <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -319,7 +403,11 @@ def_ag_WILDCAT <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y 
                                   AND fS.offenseFormation = 'WILDCAT'")
 plots <- relGraphs(def_ag_WILDCAT, "def_ag_WILDCAT", "def_ag_WILDCAT_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-5.png)<!-- -->
+
+```r
 # JUMBO 
 def_ag_JUMBO <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -327,7 +415,11 @@ def_ag_JUMBO <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   AND fS.offenseFormation = 'JUMBO'")
 plots <- relGraphs(def_ag_JUMBO, "def_ag_JUMBO", "def_ag_JUMBO_BestWin")
 plots[[3]]
+```
 
+![](heatmapping_files/figure-html/data8-6.png)<!-- -->
+
+```r
 # EMPTY
 def_ag_EMPTY <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
                                   w.gameId, w.team, w.playDirection, fS.success FROM football_inSnap1 as fS JOIN allWeeks as w ON fS.gameId = w.gameId
@@ -335,12 +427,14 @@ def_ag_EMPTY <- dbGetQuery(con, "SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - 
                                   AND fS.offenseFormation = 'EMPTY'")
 plots <- relGraphs(def_ag_EMPTY, "def_ag_EMPTY", "def_ag_EMPTY_BestWin")
 plots[[3]]
-
 ```
+
+![](heatmapping_files/figure-html/data8-7.png)<!-- -->
 
 
 #### Общие heatmaps лучшего расположения защиты по ярдлиниям
-```{r data9}
+
+```r
 # Для защиты по ярдлинии от тачдауна
 printYardsGraph <- function(strYardsfrom, strYardsto){
   strYardsfrom <- toString(strYardsfrom)
@@ -361,16 +455,22 @@ printYardsGraph <- function(strYardsfrom, strYardsto){
 ##### DIFFERENT TYPES OF YARDLINES 
 # 0-10
 yardsHeat <- printYardsGraph(0, 10)
+```
 
+![](heatmapping_files/figure-html/data9-1.png)<!-- -->
+
+```r
 # 85-100
 yardsHeat <- printYardsGraph(85, 100)
-
 ```
+
+![](heatmapping_files/figure-html/data9-2.png)<!-- -->
 
 ### Лучшее расположение защиты по ролям защитников
   Ниже представлены функции, которые отображают heatmap, ключевые точки, возвращает ключевые точки в виде dataframe для роли защитника в общем случае. Предусмотрен случай малого количества данных о хорошем отыгрыше, ведь не все тактики и роли популярны. Предусмотрен тихий режим работы функции (silent = 1), при котором не отображается heatmap.
   На вход функции подается только тип роли игрока, возвращается dataframe с ключевыми точками.
-```{r data10, warning = FALSE}
+
+```r
 roleTypes <- dbGetQuery(con, "SELECT position, COUNT(DISTINCT(playId)) as popularity FROM allWeeks
                                 GROUP BY position ORDER BY popularity DESC")
 # Функция получения базовой информации относительно роли (типа) игрока
@@ -432,10 +532,13 @@ playerTypeGraphDraw <- function(strType, k1 = 60, spy = 5, spx = spy, silent = 0
 ```
 
 #### Пример использования
-```{r data11, warning = FALSE, message = FALSE}
+
+```r
 strType <- "DL"
 bestPosDL <- playerTypeGraphDraw(strType)
 ```
+
+![](heatmapping_files/figure-html/data11-1.png)<!-- -->
 
 ##### Можно автоматически в цикле
 ```
@@ -452,7 +555,8 @@ for (i in 1:(nrow(roleTypes))) {
 ### Лучшее расположение защиты по ролям защитников и тактикам нападения
   Ниже представлены функции, которые отображают heatmap, ключевые точки, возвращает ключевые точки в виде dataframe для роли защитника и тактики нападения противника. Предусмотрен случай малого количества данных о хорошем отыгрыше, ведь не все тактики и роли популярны. Предусмотрен тихий режим работы функции (silent = 1), при котором не отображается heatmap.
   На вход функции подается только тип роли игрока и тип тактики противника, возвращается dataframe с ключевыми точками.
-```{r data14}
+
+```r
 # Функция выборки общей информации  (вспомогательная)
 printPlayersTypeTactics <- function(strType, strAType){
   i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
@@ -510,10 +614,20 @@ playerTypeTacticsGraphDraw <- function(strType, strAType, k1 = 60, spy = 5, spx 
 ```
 
 #### Пример использования
-```{r data144, warning = FALSE}
+
+```r
 strAType <- "SINGLEBACK"
 strType <- "LB"
 bestposs <- playerTypeTacticsGraphDraw(strType, strAType)
+```
+
+![](heatmapping_files/figure-html/data144-1.png)<!-- -->
+
+```
+##           x         y    density type      Atype
+## 2 4.4775758 -1.070404 0.04025423   LB SINGLEBACK
+## 1 0.9423232 -5.462222 0.02961156   LB SINGLEBACK
+## 4 0.9423232  5.761313 0.02828874   LB SINGLEBACK
 ```
 
 ##### Можно автоматически
@@ -538,7 +652,8 @@ for (i in 1:(nrow(attackTypes))) {
 
 ### Лучшие расположения для атаки
   Несмотря на то, что наша задача - определить лучшую защиту, был сделан функционал и для расположения игроков атаки.
-```{r data145}
+
+```r
 ###ATTACK
 printPlayersTypeTacticsAttack <- function(strType, strAType){
  i_def_pos <- dbGetQuery(con, paste0("SELECT fS.epa, -abs(w.x - x_b) as x_rel, (w.y - y_b) as y_rel, w.displayName, w.playId,
@@ -598,10 +713,19 @@ playerTypeTacticsGraphDrawAttack <- function(strType, strAType, k1 = 60, spy = 5
 ```
 
 #### Пример использования
-```{r data146, warning = FALSE}
+
+```r
 strAType <- "SINGLEBACK"
 strType <- "TE"
 bestpossA <- playerTypeTacticsGraphDrawAttack(strType, strAType)
+```
+
+![](heatmapping_files/figure-html/data146-1.png)<!-- -->
+
+```
+##           x         y    density type      Atype
+## 1 -1.066263 -4.863939 0.06769204   TE SINGLEBACK
+## 2 -1.066263  5.016667 0.06148169   TE SINGLEBACK
 ```
 
 ##### Можно автоматически
@@ -618,7 +742,8 @@ for (i in 1:(nrow(attackTypes))) {
 
 ### Лучшие наборы ролей для защиты
   Для определения лучшей тактики защиты недостаточно выявления расположения по ролям игроков. Важно определить лучшую компановку для команды защиты.
-```{r pesonnel, message=FALSE, warning=FALSE}
+
+```r
 library(plyr)
 library(dplyr)
 def_stat <- read.csv('data/plays_split.csv', header = TRUE, sep=',')
@@ -661,11 +786,11 @@ res <- res %>%
     result$Percentage = round ( (result$counts/(result$totalAll))*100 , 2)
     result
   })
-
 ```
 
 #### Использование
-```{r pesonnel use}
+
+```r
 bestpers <- data.frame(offenseFormation =character(),
                        DL_def=integer(),
                        LB_def =integer(),
@@ -695,7 +820,8 @@ write.csv(bestpers, "bestper.csv", row.names = FALSE)
 ## Использование
   Мы получили функционал для определения лучших расположений игроков защиты в игровой момент в зависимости от роли, типа атаки противника, ярдлинии. Определили лучшую компановку команды защиты от типа атаки противника. Определили лучшее расположение для команды атаки.
   Приведем реальный пример получения необходимых данных.
-```{r SUMUP, warning = FALSE}
+
+```r
 # Пример использования:
 # Заполнение csv позициями
 bestposs <- data.frame(x=double(),
@@ -704,21 +830,118 @@ bestposs <- data.frame(x=double(),
                     type=character(),
                     Atype=character())
 bestpos <- playerTypeGraphDraw("LB", k1 = 40, spy = 3)
+```
+
+![](heatmapping_files/figure-html/SUMUP-1.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "SHOTGUN", k1 = 50, spy = 3, spx = 10)
+```
+
+
+
+![](heatmapping_files/figure-html/SUMUP-2.png)<!-- -->
+
+```
+##      x         y    density type   Atype
+## 1 1.25 -5.846667 0.02692688   LB SHOTGUN
+## 4 1.25  5.934848 0.02672146   LB SHOTGUN
+## 2 4.50 -1.688485 0.01553885   LB SHOTGUN
+## 3 4.50  1.776667 0.01502550   LB SHOTGUN
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "SINGLEBACK", spy = 4)
+```
+
+
+
+![](heatmapping_files/figure-html/SUMUP-3.png)<!-- -->
+
+```
+##           x         y    density type      Atype
+## 2 4.4775758 -1.070404 0.04025423   LB SINGLEBACK
+## 1 0.9423232 -5.462222 0.02961156   LB SINGLEBACK
+## 4 0.9423232  5.761313 0.02828874   LB SINGLEBACK
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "I_FORM", k1 = 50, spy = 5, spx = 30)
+```
+
+
+
+![](heatmapping_files/figure-html/SUMUP-4.png)<!-- -->
+
+```
+##          x         y    density type  Atype
+## 3 4.265253  1.783636 0.03899696   LB I_FORM
+## 2 4.336061 -1.193636 0.03899694   LB I_FORM
+## 1 1.008081 -5.758788 0.02613810   LB I_FORM
+## 4 1.078889  5.753333 0.02428009   LB I_FORM
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "PISTOL", k1 = 55, spy = 5, spx = 10)
+```
+
+
+
+![](heatmapping_files/figure-html/SUMUP-5.png)<!-- -->
+
+```
+##          x          y    density type  Atype
+## 2 4.810505 -0.9154545 0.02090029   LB PISTOL
+## 3 1.634646  5.4481818 0.01326850   LB PISTOL
+## 1 1.358485 -5.9533333 0.01220810   LB PISTOL
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "JUMBO", k1 = 40, spx = 20)
+```
+
+
+![](heatmapping_files/figure-html/SUMUP-6.png)<!-- -->
+
+```
+##          x         y    density type Atype
+## 2 4.141111  1.536364 0.02625264   LB JUMBO
+## 1 1.137778 -5.950000 0.01218685   LB JUMBO
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "WILDCAT")
+```
+
+![](heatmapping_files/figure-html/SUMUP-7.png)<!-- -->
+
+```
+##          x         y    density type   Atype
+## 1 4.773939 -2.324747 0.02023577   LB WILDCAT
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeTacticsGraphDraw("LB", "EMPTY", k1 = 50)
+```
+
+![](heatmapping_files/figure-html/SUMUP-8.png)<!-- -->
+
+```
+##          x         y     density type Atype
+## 2 1.516364  5.596364 0.013835903   LB EMPTY
+## 1 1.516364 -5.341515 0.013197626   LB EMPTY
+## 5 4.838182  1.950404 0.008193436   LB EMPTY
+```
+
+```r
 bestposs <- rbind(bestposs, bestpos)
 write.csv(bestposs, "bestpossDef.csv", row.names = FALSE)
 ```
@@ -728,7 +951,8 @@ write.csv(bestposs, "bestpossDef.csv", row.names = FALSE)
 Ранее в данной работе были проведены кластеризации. Последняя из них производилась с помощью анализа отыгрышей по EPA и yardsToGo. С точки зрения рисков наиболее рискованными отыгрышами являются plays с наибольшим epa и наименьшим yardsToGo, т.к при таких параметрах высока вероятность проиграть защиту и наоборот - при низком EPA и yardsToGo вероятность отобрать очки у атаки больше.
 По всем отыгрышам в кластерах 3 и 5 (наиболее рискованном и наименее рискованном) были построены хитмапы с расположением игроков защиты по ролям.
 
-```{r CLUST, warning = FALSE, message=FALSE}
+
+```r
 ClustUpdate <- function(clustdf){
   clustdf$success <- 0
   clustdf$success[clustdf$playResult >= clustdf$yardsToGo] <- 1
@@ -758,23 +982,58 @@ clust3 <- plays_clustering[plays_clustering$epa_yardstogo == 3,]#3
 clust5 <- plays_clustering[plays_clustering$epa_yardstogo == 5,]#5
 ClustUpdate(clust3)
 bestpos <- playerTypeGraphDraw("LB", spy = 5, m = 0)
+```
+
+![](heatmapping_files/figure-html/CLUST-1.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeGraphDraw("DL", spy = 10, m = 0)
+```
+
+
+
+![](heatmapping_files/figure-html/CLUST-2.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeGraphDraw("DB", spy = 10, m = 0)
+```
+
+
+![](heatmapping_files/figure-html/CLUST-3.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 
 ClustUpdate(clust5)
 bestpos <- playerTypeGraphDraw("LB", spy = 3, m = 0)
+```
+
+![](heatmapping_files/figure-html/CLUST-4.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeGraphDraw("DL", spy = 30, m = 0)
+```
+
+
+![](heatmapping_files/figure-html/CLUST-5.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 bestpos <- playerTypeGraphDraw("DB", spy = 10, k1 = 50, m = 0)
+```
+
+
+![](heatmapping_files/figure-html/CLUST-6.png)<!-- -->
+
+```r
 bestpos$Atype <- "ALL"
 bestposs <- rbind(bestposs, bestpos)
 
@@ -782,7 +1041,6 @@ bestposs <- rbind(bestposs, bestpos)
 
 
 dbDisconnect(con)
-
 ```
  При этом видна общая тенденция на смещение игроков с ролями LB и DB дальше от мяча, что дает более стабильную и равномерно распределенную защиту (это также сильно защищает от дальних пасов). В случае появления рисков команда бросает все свои силы ближе к мячу, хотя для DL наблюдается обратная тенденция (т.к его задача - перехват паса), что подтверждает гипотезу.
 
@@ -803,7 +1061,8 @@ dbDisconnect(con)
 
 #### P.S.
   Ниже указаны разработанные, но не использованные в демонстрации функции
-```{r PS, eval = FALSE}
+
+```r
 ######################################################## NOT USED BUT READY TO USE #######################################
 if(FALSE){
 printPlayerTypeGraphAttack <- function(strType){
