@@ -1227,8 +1227,7 @@ getRealMoment <- function(poss, dc = 0.1, dc2 = 0.1){
 }
 
 momentSH <- head(getRealMoment(bestposs),1)
-bestDefmoment <- dbGetQuery(con, paste0("SELECT * FROM plays WHERE playId == ", momentSH$playId,
-									  " AND gameId == ", momentSH$gameId))
+bestDefmoment <- dbGetQuery(con, paste0("SELECT * FROM plays WHERE playId == ", momentSH$playId, " AND gameId == ", momentSH$gameId))
 write.csv(bestDefmoment, "bestDefmoment.csv")
 
 ```
