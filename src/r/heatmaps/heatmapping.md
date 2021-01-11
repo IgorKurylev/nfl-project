@@ -969,9 +969,7 @@ ClustUpdate <- function(clustdf){
                                         AND p.playId = w.playId WHERE w.event = 'ball_snap' AND w.displayName = 'Football'"))
   dbRemoveTable(con, "clustdf")
 }
-# Активировать другой relGraphs!!!!
-# Пример использования:
-# Заполнение csv позициями
+
 bestposs <- data.frame(x=double(),
                        y=double(),
                        density=double(),

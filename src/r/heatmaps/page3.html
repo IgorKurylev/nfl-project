@@ -1147,9 +1147,7 @@ write.csv(bestposs, &quot;bestpossDef.csv&quot;, row.names = FALSE)</code></pre>
                                         AND p.playId = w.playId WHERE w.event = &#39;ball_snap&#39; AND w.displayName = &#39;Football&#39;&quot;))
   dbRemoveTable(con, &quot;clustdf&quot;)
 }
-# Активировать другой relGraphs!!!!
-# Пример использования:
-# Заполнение csv позициями
+
 bestposs &lt;- data.frame(x=double(),
                        y=double(),
                        density=double(),
