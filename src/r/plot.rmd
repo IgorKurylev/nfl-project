@@ -1,8 +1,6 @@
 ---
 title: "Plotting Scene"
-output: 
-  html_document: 
-    keep_md: yes
+output: html_document
 ---
 
 В этом модуле мы будем использовать библиотеку ggplot2 и plotly для создания интерактивной карты расстановки игроков на поле.
@@ -86,7 +84,7 @@ add_missing <- function(df, cur_max) {
       diff = cur_max - nrow(df)
       df <-df[order(df$density),]
       for (i in 1:diff) {
-        dx = runif(1,0,1)
+        dx = runif(1,0,2)
         dy = runif(1,-5,5)
         new <- list(x=df[i,]$x + dx, y=df[i,]$y + dy, density=df[i,]$density, type=df[i,]$type, Atype=df[i,]$Atype)
         df <- rbind(df, new)
@@ -118,10 +116,10 @@ add_missing <- function(df, cur_max) {
 
 ```{r}
 formation_make <- function(type=0, formation) {
-  bestper <- read.csv("bestper.csv")
-  bestpossDef <- read.csv("bestPosDef.csv")
-  bestpossDef <- bestpossDef[bestpossDef$density != 0,]
-  bestpossA <- read.csv("bestpossAtck.csv")
+  # bestper <- read.csv("bestper.csv")
+  # bestpossDef <- read.csv("bestPosDef.csv")
+  # bestpossDef <- bestpossDef[bestpossDef$density != 0,]
+  # bestpossA <- read.csv("bestpossAtck.csv")
   if(type == 0){
     current <- bestper[bestper$offenseFormation == formation,]
     all_pos <- bestpossDef[bestpossDef$Atype == formation,]
@@ -160,11 +158,15 @@ formation_make <- function(type=0, formation) {
 
 ## Использование
 
-Положение мяча генерируется с использованием функции равномерного распределния `runif()`
+Положение мяча генерируется с использованием функции равномерного распределния `runif()`. Для получения позиций игроков в цикле будем использовать созданную нами функцию `formation_make`. Посмотрим на позиции команд при различных формациях атаки. Хотя формация атаки держится в тайне при начале игры, защита все равно в большинстве случаев различается в соответствии с формацией.
 
 ```{r, warning=FALSE}
 l <- htmltools::tagList()
 i = 1
+bestper <- read.csv("bestper.csv")
+bestpossDef <- read.csv("bestPosDef.csv")
+bestpossDef <- bestpossDef[bestpossDef$density != 0,]
+bestpossA <- read.csv("bestpossAtck.csv")
 for (form in c("ALL", "EMPTY", "I_FORM", "JUMBO", "PISTOL", "SHOTGUN", "SINGLEBACK", "WILDCAT")) {
   def_df <- formation_make(type=0, formation = form)
   off_df <- formation_make(type=1, formation = form)
@@ -176,10 +178,48 @@ l
 
 Использование таких расположений позволяет по типу атаки сформировать положение команд на поле.
 
-</p><a href="Plot-and-BMI-analysis.html">Следующая страница<a>
+По итогам кластеризации были выявлены наиболее рискованные, а так же наименее рискованные ситауации на поле. Это значения относящиеся к 3 и 5 кластерам 
+
+```{r}
+plays_clustering <- read.csv('plays_clustering.csv')
+plays_clustering <- plays_clustering[plays_clustering$epa_yardstogo == 3 | plays_clustering$epa_yardstogo == 5,]
+
+fig <- ggplot(data = plays_clustering) + 
+  geom_point(aes(yardsToGo, epa, colour=factor(epa_yardstogo))) +
+  geom_hline(yintercept = 0) +
+  labs(colour="Cluster") +
+  scale_color_manual(values=c("#df0000", "#40ad00"))
+
+ggplotly(fig)
+```
+
+Построим наилучшие позиции полученные с помощью heatmaps. Для этого в подготовленную функцию генерации позиций загружаем датасет `possDefCust3` с лучшими позициями защиты под 3 кластер. Для команды атаки используем уже готовый датасет `bestpossAtck`.
+
+```{r}
+bestpossDef <- read.csv("possDefCust3.csv")
+bestpossA <- read.csv("bestpossAtck.csv")
+def_df <- formation_make(type=0, formation = "ALL")
+off_df <- formation_make(type=1, formation = "ALL")
+plot_scene(off_df, def_df, runif(1,20,80), runif(1, 20, 33), "Наименее рискованная ситуация")
+```
+
+Для наименее рискованной ситуации, когда команде атаки надо пройти достаточно много ярдов для текщего дауна и для этого момента низкий EPA, загрузим датасет `possDefCust5`.
+
+```{r}
+bestpossDef <- read.csv("possDefCust5.csv")
+bestpossA <- read.csv("bestpossAtck.csv")
+def_df <- formation_make(type=0, formation = "ALL")
+off_df <- formation_make(type=1, formation = "ALL")
+plot_scene(off_df, def_df, runif(1,20,80), runif(1, 20, 33), "Наименее рискованная ситуация")
+```
+
+Как и предполагалось, если осталось пройти немного ярдов, то защита стремится выстроиться в скученную линию. И наоборот, когда команде противников нужно пройти большее расстояние, защита растягивается, обеспечивая несколько слоев обороны. В некотором смысле это обусловлено тактикой атакующих - при маленьком yardsToGo атаке возможно стоит попытаться проскочить напрямую (такая игра Нырок(dive) когда RB пытается проскочить в коридор между гардом и тэклом).
+
+
+</p><a href="page5.html">Следующая страница<a>
 
 <p></p>
 
-<a href="heatmapping.html">Предыдущая страница<a>
+<a href="page3.html">Предыдущая страница<a>
 
 <p></p><p>
