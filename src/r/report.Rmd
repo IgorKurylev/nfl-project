@@ -39,21 +39,21 @@ output:
 
 - Defensive line (DL) включает в себя:
 
- + Defensive tackle (DT)
+-- Defensive tackle (DT)
 
- + Defensive end (DE)
+-- Defensive end (DE)
 
 - Linebackers (LB)
 
- + Middle linebacker (MLB)
+-- Middle linebacker (MLB)
 
- + Outside linebacker (OLB)
+-- Outside linebacker (OLB)
 
 - Defensive backs (DB)
 
- + Cornerback (CB)
+-- Cornerback (CB)
 
- + Safety (S)
+-- Safety (S)
 
 ## Краткий обзор данных
 
@@ -101,6 +101,8 @@ EPA вычисляется разницей между EP (ожидаемых о
 - Выявить лучших защитников по критерию стабильности появления в отыгрышах
 
 - Выявить лучших защитников по биологическим параметрам
+
+- Проанализировать отыгрыши по критериям риска для команды защиты
 
 # Обзорная часть
 
@@ -268,10 +270,13 @@ plot(boosted_model, i = "passResult", ylab = "predicted value", lwd = 2)
 plot(boosted_model, i = "offenseFormation", ylab = "predicted value", lwd = 2)
 ```
 
-Также, при фиксированном *epa*, расстановка атакующих практически не повлияет на исход отыгрыша, так как фактор *epa* более важен в данной модели:
+Также при фиксированном *offenceFormation* расстановка атакующих практически не повлияет на предсказываемое моделью значение, что говорит о том, что фактор *epa* более важен в данной модели:
+
+```{r message=FALSE, warning=FALSE, include=FALSE, echo=TRUE}
+iters <- gbm.perf(boosted_model,method="OOB")
+```
 
 ```{r message=FALSE, warning=FALSE}
-iters <- gbm.perf(boosted_model,method="OOB")
 plot.gbm(boosted_model, c(2, 9), iters)
 ```
 
