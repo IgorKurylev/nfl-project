@@ -8,20 +8,10 @@ output:
 Загружаем пакеты: `RPostgres`, `plotly`, `ggplot2`
 
 ```{r, message=FALSE, echo=FALSE}
-if (!require('memisc'))
+if (!require('tidyverse'))
 {
-  install.packages('memisc', dependencies = TRUE)
-  library('memisc')
-}
-if (!require('eeptools'))
-{
-  install.packages('eeptools', dependencies = TRUE)
-  library('eeptools')
-}
-if (!require('RPostgres'))
-{
-  install.packages('RPostgres', dependencies = TRUE)
-  library('RPostgres')
+  install.packages('tidyverse', dependencies = TRUE)
+  library('tidyverse')
 }
 if (!require('plotly'))
 {
@@ -37,36 +27,20 @@ if (!require('ggplot2'))
 
 ## Data
 
-Мы можем использовать базу данных (в данном модуле PostgreSQL) для выполнения операций выборки данных. Однако это не принципиально - некоторые строки используют обычные `csv` файлы
-
-Подключимся к базе данных, развернутой на `http://localhost`
-
-```{r}
-library(DBI)
-con <- dbConnect(RPostgres::Postgres(),
-                 dbname = 'datascience',
-                 host = 'localhost',
-                 port = 5432,
-                 user = 'postgres',
-                 password = 'fred')
-```
+Изначально была идея использовать для данных общую бд, однако в ходе разработки было решено, что использование csv файлов практичнее и быстрее.
 
 Получим данные обо всех игровых моментах из таблицы *plays*
 
 ```{r}
-plays_sql <- dbSendQuery(con, 'select * from plays')
-plays_df <- dbFetch(plays_sql)
-# plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
+plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
 head(plays_df)
 ```
 
 Получим координаты всех игроков в игровые моменты первой недели, используя `week1.csv`
 
 ```{r}
-week_sql <- dbSendQuery(con, 'select * from week1')
-df_week <- dbFetch(week_sql)
-# df_week <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
-head(df_week)
+df_week1 <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+head(df_week1)
 ```
 
 ## Plotting
@@ -80,7 +54,7 @@ plot_play_moment <- function(gameId, playId) {
   slice_df <-slice_df[order(slice_df$frameId, slice_df$nflId),]
   play_moment <- plays_df[plays_df$gameId==gameId & plays_df$playId == playId,]
   
-  cat(play_moment$playDescription)
+  print(play_moment$playDescription)
   
   plt <- ggplot(slice_df, aes(frame = frameId)) + 
     annotate("rect", xmin = 0, xmax = 10, ymin = 0, ymax = 53,fill='red', alpha=.2) + 
@@ -106,8 +80,6 @@ plot_play_moment <- function(gameId, playId) {
   }
 ```
 
-
-
 Просматривая моменты, захотелось отыскать эти кадры в реальных трансляциях. Вот некотрые интересные моменты сопоставленные с видео на серверах YouTube
 
 - gameId=2018090600, playId=2474 - https://youtu.be/0fLqHxm90mM?t=286
@@ -117,6 +89,7 @@ plot_play_moment <- function(gameId, playId) {
 - gameId=2018090600, playId=344 - https://youtu.be/0fLqHxm90mM?t=74
 
 ```{r}
+df_week <- df_week1
 plot_play_moment(2018090600, 344)
 ```
 
@@ -125,41 +98,57 @@ plot_play_moment(2018090600, 344)
 2018090600,2474 - https://youtu.be/0fLqHxm90mM?t=286
 
 ```{r}
+df_week <- df_week1
 plot_play_moment(2018090600,2474)
 ```
 
 Такая отрисовка во многом проще для восприятия и позволяет нам лучше понять игровой момент. А покадровое перемещение игроков может прояснить некоторые спорные моменты. Такое представление удобно будет использовать для разрешения спорных ситуаций.
 
+### Using
+
+Ранее в отчете были получены наилучшие позиции игроков защиты. Из данных были отобраны реальные игровые моменты, расположение защиты в которых совпадает с ними. В качестве приикладного использования функции `plot_play_moment` приведем анимацию такого момента. Так как этот момент произошел на 7 неделе, загрузим `week7.csv` в переменную `df_week`.
+
+Этот момент "вживую" - https://youtu.be/U4SzvAfjR0o?t=2191
+
+```{r}
+df_week7 <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week7.csv'))
+df_week <- df_week7
+plot_play_moment(2018102106,1177)
+```
+
+Мы видим, что даже в самом напряженном случае (расстояние до тачдауна 5 ярдов) защита успешно работает
+
 ## BMI-analisys
 
 BMI - это показатель массы человека (на русском звучит, как индекс массы тела). Это весьма простой параметр который неплохо может оценить весовое соотношение человека.
 
-Для начала получим данные об игроках
+
+Для начала получим данные об игроках. Мы будем использовать исправленные данные об игроках. В исходной таблице игроков рост и вес был записан в разных форматах, для упрощения работы, был использован скрипт на языке Python. Так же загрузим таблицу с рассчитанными кластерами, она пригодится нам позже.
 
 ```{r}
-# players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
-players_df <- as.data.frame(read.csv('clustering.csv'))
-players_sql <- dbSendQuery(con, 'select * from players')
-players_df2 <- dbFetch(players_sql)
-players_df$birthDate <- as.Date(players_df$birthDate)
+players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
+clustered <- as.data.frame(read.csv('clustering.csv'))
 head(players_df)
 ```
 
 В среднем BMI можно разделить на несколько категорий:
 
-Недобор = <18.5
-Нормальный вес= 18.5–24.9 
-Сверх нормы = 25–29.9 
-Ожирение = 30 или больше
+- Недобор = < 18.5
+
+- Нормальный вес = 18.5–24.9 
+
+- Сверх нормы = 25–29.9 
+
+- Ожирение = 30 или больше
+
+Однако мы не можем говорить о мышечной массе спортсменов, нам недостаточно информации. Поэтому мы будем рассматривать BMI, как весовой показатель. Ведь чем выше масса тем сильнее удар на скорости, в независимости масса жира или мышц.
 
 Чтобы подсчитать индекс массы тела используем формулу для фунтов:
 
-$(weight / height^2) * 703$
-
-Так как теперь он посчитан в первой части отчета, то это вычисление бессмыслено. Повторим для команды атаки.
+$BMI = (weight / height^2) * 703$
 
 ```{r}
-players_df2$BMI <- (players_df2$weight / (players_df2$height)^2) * 703
+players_df$BMI <- (players_df$weight / (players_df$height)^2) * 703
 ```
 
 Разобьем на три категории команд:
@@ -170,36 +159,41 @@ players_df2$BMI <- (players_df2$weight / (players_df2$height)^2) * 703
 
 Расшифровка игроков
 
-'CB', : CornerBack
-'SS', : Strong Safety
-'MLB', : Middle LineBacker
-'OLB', : Outer LineBacker
-'FS', : Free Safety
-'WR', : Wide Receiver
-'QB', : Quater Back
-'TE', : Tight End
-'RB', : Running Back
-'DE', : Defensive End
-'LB', : LineBacker
-'FB', : FullBack
-'ILB', : Inside LineBacker
-'DB', : Defensive Back
-'S', : Safety
-'HB', : HalfBack
-'NT', : Nose Tackle
-'P', : Punter
-'LS', : LongSnaper
-'K', : Kicker
-'DT' : Defense Tackle
+*Защита*
+- `CB` : CornerBack
+- `SS` : Strong Safety
+- `MLB` : Middle LineBacker
+- `OLB` : Outer LineBacker
+- `LB` : LineBacker
+- `ILB` : Inside LineBacker
+- `DT` : Defense Tackle
+- `S` : Safety
+- `DE` : Defensive End
+- `DB` : Defensive Back
+- `FS` : Free Safety
+
+*Атака*
+- `RB` : Running Back
+- `QB` : Quater Back
+- `WR` : Wide Receiver
+- `FB` : FullBack
+- `TE` : Tight End
+- `HB` : HalfBack
+- `NT` : Nose Tackle
+
+*Специальная команда*
+- `P` : Punter
+- `LS` : LongSnaper
+- `K` : Kicker
 
 ```{r}
-offence_df <- subset(players_df2, (players_df2$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
+offence_df <- subset(players_df, (players_df$position %in% c('QB','WR','RB','FB', 'TE', 'NT', 'HB')))
 defence_df <- subset(players_df, !(players_df$position %in% c('K', 'P', 'LS', 'QB','WR','RB','FB', 'TE', 'NT', 'HB')))
 ```
 
 ### Команда защиты
 
-Мы видим, что основная часть команды защиты находится около группы с BMI выше нормы. Самые крупные игроки это DE и DT
+Мы видим, что основная часть команды защиты находится около группы с BMI выше нормы. Самые крупные игроки это DE и DT, далее идут игроки из категории *LineBacker* - они находятся на границе 30 BMI. И наконец игроки *Defensive Back* находятся в некоторых пределах нормы 25-30 BMI
 
 ```{r}
 plt <- ggplot(data=defence_df, aes(as.factor(position), BMI)) +
@@ -251,35 +245,76 @@ defence_df['category'] <- ifelse(defence_df$position %in% c('DT', 'DE'),
                                  )
 ```
 
-Повторим построение points by BMI используя полученные категории игроков.
+Добавим посчитанные при кластеризации очки игрокам и повторим построение графика зависимости points и BMI, используя полученные категории игроков. Для получения информации о самых эффектифных игроках посмотрим на зависимость $points/max(points)/cnt$. Таким образом мы пронормируем очки от -1 до 1, а затем уменьшим их обратно пропорционально количеству игр. Таким образом интересующий нас кластер окажется около 0. То есть, чем чаще игрок встречался в игре, тем меньше он должен получить оченку. Иначе мы не сможем отличить игрока, пропустил 99 очков за 3 матча или пропускал по 3 очка 33 игры.
 
 ```{r}
-plt <- ggplot(data=defence_df, aes(BMI, points)) +
-  geom_point(aes(color=factor(category))) +
+points_def_df <- merge(clustered, defence_df)
+points_def_df['weighted_pnts'] = points_def_df$points /
+                            max(points_def_df$points) /
+                            points_def_df$cnt
+
+plt <- ggplot(data=points_def_df, aes(BMI, weighted_pnts)) +
+  geom_point(aes(color=factor(points_bmi), alpha=0.7)) +
   geom_hline(yintercept = 0, colour='red')
-ggplotly(plt + labs(title = 'Points by BMI (Defence)', x = 'BMI', y = 'Points', color = 'Category'))
+ggplotly(plt + labs(title = 'Weighted Points by BMI (Defence)', x = 'BMI', y = 'Weighted Points', color = 'Cluster'))
 ```
 
-Мы видим, что данные соответствуют разделению по кластеризации, сделанному в первой части отчета. Самые эффективные защитники - DL. Они приносят больше всего очков команде защиты. Однако, как мы видим по данным, их в разы меньше игроков DB и LB. Это так же может влиять на распределение.
+Обратим внимание на 5 кластер - он достаточно растянут по BMI и при этом находится около 0, причем с обеих сторон, то есть эти игроки приносили даже отрицательные очки, что хорошо для защиты.
+
+Повторим вывод 5 кластера, но с разделением по категориям игроков.
+
+```{r}
+best_def_df <- points_def_df[points_def_df$points_cnt == 5,]
+
+plt <- ggplot(data=best_def_df, aes(BMI, weighted_pnts)) +
+  geom_point(aes(color=factor(category), alpha=0.7)) +
+  geom_hline(yintercept = 0, colour='red')
+ggplotly(plt + labs(title = 'Weighted Points by BMI (Defence)', x = 'BMI', y = 'Weighted Points', color = 'Category'))
+```
+
+Мы получили достаточно четкое распределение по ролям, давайте выведем топ лучших в каждой категории.
+
+```{r}
+db_best <- best_def_df[best_def_df$category == 'DB',]
+top_10_db <-db_best[order(-db_best$cnt, db_best$points),]
+top_10_db %>% select(1, 6, 7, 8, 9, 10, 13, 14)
+```
+
+```{r}
+lb_best <- best_def_df[best_def_df$category == 'LB',]
+top_10_lb <-lb_best[order(-lb_best$cnt, lb_best$points),]
+top_10_lb %>% select(1, 6, 7, 8, 9, 10, 13, 14)
+```
+
+
+```{r}
+dl_best <- best_def_df[best_def_df$category == 'DL',]
+top_10_dl <-dl_best[order(-dl_best$cnt, dl_best$points),]
+top_10_dl %>% select(1, 6, 7, 8, 9, 10, 13, 14)
+```
+
+Мы видим, что данные соответствуют разделению по кластеризации, сделанному в первой части отчета. Самые эффективные защитники - DL. Они приносят больше всего очков команде защиты. Однако, как мы видим по данным, их в разы меньше игроков DB и LB. Это так же влияет на распределение.
 
 ### Команда атаки
 
-Среди атакующих выделяются игроки NT. Остальные находятся на границе в 30 BMI. Самыми легкими оказались WR - они должны быть быстрыми и ловкими, чтобы суметь поймать мяч и пройти дальше за линию защиты.
+Проверим теперь распределение для игроков атаки, как их веса соотносятся с друг другом? Могут ли быть слабые стороны в подборе противников тренерами?
+
+Среди атакующих выделяются игроки NT. Именно они "летят" на тэклов защиты. Остальные находятся на границе в 30 BMI. Самыми легкими оказались WR - они должны быть быстрыми и ловкими, чтобы суметь поймать мяч и пройти дальше за линию защиты.
 
 ```{r}
 plt2 <- ggplot(data=offence_df, aes(as.factor(position), BMI)) +
   geom_point(aes(color=factor(position)), position='jitter', alpha=0.2) +
-  geom_boxplot(aes(group=factor(position)), alpha = 0.1, outlier.size = -Inf) + 
+  geom_boxplot(aes(group=factor(position)), alpha = 0.3, outlier.size = -Inf) + 
   geom_hline(yintercept = seq(25,30,5), colour='red')
 plot(plt2 + labs(title = 'BMI by position (Offence)', x = 'Position', y = 'BMI', color = 'Position'))
 ```
 
 Таким образом получается что каждая категория игроков имеет схожие биологические параметры. А что более значимо, игроки которые стоят против друг друга (например, DT и NT) так же имеют сходные параметры. Это означает, что тренеры команд специально подбирают игроков в соответствии с формацией противника.
 
-</p><a href="Distance-Analysis.html">Следующая страница</a>
+<a href="page6.html">Следующая страница</a>
 
 <p></p>
 
-<a href="plot.html">Предыдущая страница</a>
+<a href="page4.html">Предыдущая страница</a>
 
-<p></p><p>
+<p></p>
