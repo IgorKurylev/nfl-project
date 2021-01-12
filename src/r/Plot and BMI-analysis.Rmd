@@ -32,14 +32,14 @@ if (!require('ggplot2'))
 Получим данные обо всех игровых моментах из таблицы *plays*
 
 ```{r}
-plays_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/plays.csv'))
+plays_df <- as.data.frame(read.csv('data/nfl-big-data-bowl-2021/plays.csv'))
 head(plays_df)
 ```
 
 Получим координаты всех игроков в игровые моменты первой недели, используя `week1.csv`
 
 ```{r}
-df_week1 <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week1.csv'))
+df_week1 <- as.data.frame(read.csv('data/nfl-big-data-bowl-2021/week1.csv'))
 head(df_week1)
 ```
 
@@ -111,7 +111,7 @@ plot_play_moment(2018090600,2474)
 Этот момент "вживую" - https://youtu.be/U4SzvAfjR0o?t=2191
 
 ```{r}
-df_week7 <- as.data.frame(read.csv('nfl-big-data-bowl-2021/week7.csv'))
+df_week7 <- as.data.frame(read.csv('data/nfl-big-data-bowl-2021/week7.csv'))
 df_week <- df_week7
 plot_play_moment(2018102106,1177)
 ```
@@ -126,8 +126,8 @@ BMI - это показатель массы человека (на русско
 Для начала получим данные об игроках. Мы будем использовать исправленные данные об игроках. В исходной таблице игроков рост и вес был записан в разных форматах, для упрощения работы, был использован скрипт на языке Python. Так же загрузим таблицу с рассчитанными кластерами, она пригодится нам позже.
 
 ```{r}
-players_df <- as.data.frame(read.csv('nfl-big-data-bowl-2021/fix.fix.players.csv'))
-clustered <- as.data.frame(read.csv('clustering.csv'))
+players_df <- as.data.frame(read.csv('data/nfl-big-data-bowl-2021/fix.fix.players.csv'))
+clustered <- as.data.frame(read.csv('data/clustering.csv'))
 head(players_df)
 ```
 
@@ -254,7 +254,7 @@ points_def_df['weighted_pnts'] = points_def_df$points /
                             points_def_df$cnt
 
 plt <- ggplot(data=points_def_df, aes(BMI, weighted_pnts)) +
-  geom_point(aes(color=factor(points_bmi), alpha=0.7)) +
+  geom_point(aes(color=factor(points_cnt), alpha=0.7)) +
   geom_hline(yintercept = 0, colour='red')
 ggplotly(plt + labs(title = 'Weighted Points by BMI (Defence)', x = 'BMI', y = 'Weighted Points', color = 'Cluster'))
 ```
